@@ -1,0 +1,37 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Local development
+*.log
+logs/
+.DS_Store
+Thumbs.db
+
+# Excel files (don't deploy source data)
+*.xlsx
+*.xls
+
+# Testing
+test-db.js
+setup-postgres.sh
+setup-postgres.bat
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Deployment
+server-postgres.js

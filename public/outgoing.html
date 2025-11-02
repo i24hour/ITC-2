@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Outgoing - ITC Warehouse Management</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="logo-small">ITC</div>
+            <span>Warehouse Management</span>
+        </div>
+        <div class="nav-actions">
+            <a href="dashboard.html" class="btn btn-secondary">← Back to Dashboard</a>
+            <button class="btn btn-text" id="logout-btn">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Step 1: Enter SKU to Dispatch -->
+        <div id="step1-outgoing" class="step-container active">
+            <header class="page-header">
+                <h1>📤 Outgoing Inventory</h1>
+                <p class="page-subtitle">Search SKU for FIFO dispatch</p>
+            </header>
+
+            <div class="form-card">
+                <form id="outgoing-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="sku-search">Enter SKU</label>
+                            <select id="sku-search" required>
+                                <option value="">Select a SKU...</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="dispatch-qty">Quantity to Dispatch</label>
+                            <input type="number" id="dispatch-qty" placeholder="e.g., 30" min="1" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="batch-number">Batch Number (Optional)</label>
+                            <input type="text" id="batch-number" placeholder="e.g., BATCH-2025-001">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-lg">Search & Auto-Select Bins (FIFO)</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Step 2: FIFO Bin Selection (Auto) -->
+        <div id="step2-outgoing" class="step-container">
+            <header class="page-header">
+                <h1>🔄 FIFO Automatic Bin Selection</h1>
+                <p class="page-subtitle">Bins automatically selected based on First In, First Out</p>
+            </header>
+
+            <div class="fifo-info">
+                <div class="info-card">
+                    <div class="info-icon">📦</div>
+                    <div class="info-content">
+                        <h4>SKU: <span id="outgoing-sku"></span></h4>
+                        <p>Requested Quantity: <span id="outgoing-qty"></span> units</p>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="info-icon">✅</div>
+                    <div class="info-content">
+                        <h4>Auto-Selected Bins</h4>
+                        <p><span id="selected-bins-count">0</span> bins selected</p>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="info-icon">📊</div>
+                    <div class="info-content">
+                        <h4>Total Available</h4>
+                        <p><span id="total-available">0</span> units</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="selected-bins-display">
+                <h3>Selected Bins (FIFO Order)</h3>
+                <div id="fifo-bins-list" class="fifo-bins-list">
+                    <!-- Bins auto-populated based on FIFO -->
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-secondary" id="back-to-search">← Back</button>
+                <button class="btn btn-primary btn-lg" id="proceed-to-dispatch">Proceed to Dispatch Scanning</button>
+            </div>
+        </div>
+
+        <!-- Step 3: QR Scanner for Dispatch -->
+        <div id="step3-outgoing" class="step-container">
+            <header class="page-header">
+                <h1>🎯 Scan Bins for Dispatch</h1>
+                <p class="page-subtitle">Scan each bin to confirm dispatch</p>
+            </header>
+
+            <div class="scanner-container">
+                <div class="scanner-section">
+                    <div class="scanner-header">
+                        <h3>📷 QR Code Scanner</h3>
+                        <button class="btn btn-small" id="toggle-camera-out">Switch Camera</button>
+                    </div>
+                    <div id="qr-reader-out" class="qr-reader"></div>
+                    <div class="scanner-status">
+                        <p id="scan-status-out">Ready to scan...</p>
+                    </div>
+                </div>
+
+                <div class="scan-lists">
+                    <div class="scan-list incomplete-list">
+                        <h3>⏳ Bins Pending Dispatch</h3>
+                        <div id="incomplete-bins-out" class="bin-items">
+                            <!-- Populated from FIFO selection -->
+                        </div>
+                    </div>
+
+                    <div class="scan-list complete-list">
+                        <h3>✅ Bins Dispatched Successfully</h3>
+                        <div id="complete-bins-out" class="bin-items">
+                            <!-- Populated on scan -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-secondary" id="cancel-dispatch">Cancel</button>
+                <button class="btn btn-success btn-lg" id="complete-outgoing" style="display: none;">Complete & Return to Dashboard</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="outgoing.js"></script>
+</body>
+</html>

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - ITC Warehouse Management</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="logo-small">ITC</div>
+            <span>Warehouse Management</span>
+        </div>
+        <div class="nav-user">
+            <span id="user-name">John Doe</span>
+            <button class="btn btn-text" id="logout-btn">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container dashboard-container">
+        <header class="page-header">
+            <h1>Dashboard</h1>
+            <p class="page-subtitle">Manage your warehouse operations efficiently</p>
+        </header>
+
+        <div class="dashboard-grid">
+            <!-- Supervisor Access (Only for supervisors) -->
+            <div class="dashboard-section actions-section" id="supervisor-access" style="display: none;">
+                <h2>👨‍💼 Supervisor Controls</h2>
+                <div class="action-cards">
+                    <a href="supervisor.html" class="action-card supervisor-card">
+                        <div class="card-icon">🎛️</div>
+                        <h3>Supervisor Panel</h3>
+                        <p>Manage SKUs, monitor tasks, and control operations</p>
+                        <span class="card-arrow">→</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Main Actions -->
+            <div class="dashboard-section actions-section">
+                <h2>Quick Actions</h2>
+                <div class="action-cards">
+                    <a href="incoming.html" class="action-card incoming-card">
+                        <div class="card-icon">📥</div>
+                        <h3>Incoming</h3>
+                        <p>Record and place incoming SKUs into bins</p>
+                        <span class="card-arrow">→</span>
+                    </a>
+                    
+                    <a href="outgoing.html" class="action-card outgoing-card">
+                        <div class="card-icon">📤</div>
+                        <h3>Outgoing</h3>
+                        <p>Dispatch SKUs using FIFO system</p>
+                        <span class="card-arrow">→</span>
+                    </a>
+                    
+                    <a href="reports.html" class="action-card reports-card">
+                        <div class="card-icon">📊</div>
+                        <h3>Reports</h3>
+                        <p>View analytics and inventory reports</p>
+                        <span class="card-arrow">→</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Task History -->
+            <div class="dashboard-section history-section">
+                <h2>Task History</h2>
+                <div class="task-history">
+                    <div class="history-legend">
+                        <span class="legend-item incomplete">⬤ Incomplete</span>
+                        <span class="legend-item complete">⬤ Complete</span>
+                    </div>
+                    <div id="task-list" class="task-list">
+                        <!-- Tasks will be loaded dynamically -->
+                        <div class="task-item incomplete">
+                            <div class="task-info">
+                                <span class="task-sku">SKU001</span>
+                                <span class="task-qty">50 units</span>
+                            </div>
+                            <span class="task-date">2 hours ago</span>
+                        </div>
+                        <div class="task-item complete">
+                            <div class="task-info">
+                                <span class="task-sku">SKU002</span>
+                                <span class="task-qty">20 units</span>
+                            </div>
+                            <span class="task-date">5 hours ago</span>
+                        </div>
+                        <div class="task-item incomplete">
+                            <div class="task-info">
+                                <span class="task-sku">SKU003</span>
+                                <span class="task-qty">35 units</span>
+                            </div>
+                            <span class="task-date">1 day ago</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reminders -->
+            <div class="dashboard-section reminders-section">
+                <h2>⚠️ Expiry Reminders</h2>
+                <div id="reminders-list" class="reminders-list">
+                    <div class="reminder-item urgent">
+                        <div class="reminder-icon">🔴</div>
+                        <div class="reminder-content">
+                            <h4>SKU005 - Bin A12</h4>
+                            <p>Expires in 2 days</p>
+                        </div>
+                    </div>
+                    <div class="reminder-item warning">
+                        <div class="reminder-icon">🟡</div>
+                        <div class="reminder-content">
+                            <h4>SKU012 - Bin B05</h4>
+                            <p>Expires in 5 days</p>
+                        </div>
+                    </div>
+                    <div class="reminder-item info">
+                        <div class="reminder-icon">🟢</div>
+                        <div class="reminder-content">
+                            <h4>SKU008 - Bin C20</h4>
+                            <p>Expires in 10 days</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="dashboard-section stats-section">
+                <h2>Quick Statistics</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">156</div>
+                        <div class="stat-label">Active Bins</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">42</div>
+                        <div class="stat-label">SKU Types</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">2,450</div>
+                        <div class="stat-label">Total Units</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">12</div>
+                        <div class="stat-label">Empty Bins</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>

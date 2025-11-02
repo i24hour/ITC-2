@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ITC Inventory - Processing Scan</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #003d82 0%, #001f4d 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            border-top: 4px solid #d4af37;
+        }
+
+        .loading {
+            display: block;
+        }
+
+        .result {
+            display: none;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #d4af37;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        h1 {
+            color: #003d82;
+            margin-bottom: 20px;
+            font-size: 2rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .success-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+
+        .error-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+
+        .details {
+            background: linear-gradient(135deg, #f8f6f0 0%, #fff 100%);
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: left;
+            border-left: 3px solid #d4af37;
+        }
+
+        .details p {
+            margin: 10px 0;
+            color: #003d82;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .details strong {
+            color: #003d82;
+            font-weight: 600;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #d4af37 0%, #c9a227 100%);
+            color: #003d82;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            margin-top: 20px;
+            transition: all 0.3s;
+            border: none;
+            font-size: 1rem;
+            cursor: pointer;
+            letter-spacing: 0.5px;
+        }
+
+        .btn:hover {
+            background: linear-gradient(135deg, #e6c245 0%, #d4af37 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(212, 175, 55, 0.4);
+        }
+
+        .error-message {
+            color: #742a2a;
+            background: #fed7d7;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="loading" id="loading">
+            <h1>Processing Scan...</h1>
+            <div class="spinner"></div>
+            <p>Please wait while we update the inventory</p>
+        </div>
+
+        <div class="result success-result" id="success-result">
+            <div class="success-icon">✅</div>
+            <h1>Scan Successful!</h1>
+            <div class="details" id="details"></div>
+            <a href="/" class="btn">Return to Home</a>
+        </div>
+
+        <div class="result error-result" id="error-result">
+            <div class="error-icon">❌</div>
+            <h1>Scan Failed</h1>
+            <div class="error-message" id="error-message"></div>
+            <a href="/" class="btn">Return to Home</a>
+        </div>
+    </div>
+
+    <script>
+        // Use the same host as the current page (works for both localhost and network IP)
+        const API_BASE = `http://${window.location.hostname}:3000/api`;
+
+        async function processScan() {
+            // Get parameters from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const binNo = urlParams.get('binNo');
+            const sku = urlParams.get('sku');
+            const value = urlParams.get('value');
+
+            if (!binNo || !sku || !value) {
+                showError('Invalid QR code. Missing required parameters.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/process-scan`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ binNo, sku, value: parseInt(value) })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showSuccess(result);
+                } else {
+                    showError(result.error || 'Unknown error occurred');
+                }
+            } catch (error) {
+                console.error('Error processing scan:', error);
+                showError(`Failed to process scan: ${error.message}`);
+            }
+        }
+
+        function showSuccess(result) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('success-result').style.display = 'block';
+            
+            document.getElementById('details').innerHTML = `
+                <p><strong>Bin:</strong> ${result.binNo}</p>
+                <p><strong>SKU:</strong> ${result.sku}</p>
+                <p><strong>Previous Value:</strong> ${result.previousValue} units</p>
+                <p><strong>Subtracted:</strong> ${result.subtracted} units</p>
+                <p><strong>New Value:</strong> ${result.newValue} units</p>
+            `;
+        }
+
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error-result').style.display = 'block';
+            document.getElementById('error-message').textContent = message;
+        }
+
+        // Start processing when page loads
+        window.addEventListener('DOMContentLoaded', processScan);
+    </script>
+</body>
+</html>

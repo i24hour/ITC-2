@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports - ITC Warehouse Management</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="logo-small">ITC</div>
+            <span>Warehouse Management</span>
+        </div>
+        <div class="nav-actions">
+            <a href="dashboard.html" class="btn btn-secondary">← Back to Dashboard</a>
+            <button class="btn btn-text" id="logout-btn">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container reports-container">
+        <header class="page-header">
+            <h1>📊 Inventory Reports & Analytics</h1>
+            <p class="page-subtitle">Comprehensive warehouse insights and statistics</p>
+        </header>
+
+        <!-- Report Filters -->
+        <div class="report-filters">
+            <div class="filter-group">
+                <label for="date-range">Date Range:</label>
+                <select id="date-range">
+                    <option value="today">Today</option>
+                    <option value="week" selected>This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="custom">Custom Range</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="report-type">Report Type:</label>
+                <select id="report-type">
+                    <option value="all">All Activities</option>
+                    <option value="incoming">Incoming Only</option>
+                    <option value="outgoing">Outgoing Only</option>
+                    <option value="inventory">Current Inventory</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" id="generate-report">Generate Report</button>
+            <button class="btn btn-secondary" id="export-report">📥 Export CSV</button>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="reports-summary">
+            <div class="summary-card">
+                <div class="summary-icon incoming">📥</div>
+                <div class="summary-content">
+                    <h4>Total Incoming</h4>
+                    <p class="summary-value">1,245 units</p>
+                    <span class="summary-change positive">+12% from last week</span>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-icon outgoing">📤</div>
+                <div class="summary-content">
+                    <h4>Total Outgoing</h4>
+                    <p class="summary-value">987 units</p>
+                    <span class="summary-change positive">+8% from last week</span>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-icon stock">📦</div>
+                <div class="summary-content">
+                    <h4>Current Stock</h4>
+                    <p class="summary-value">2,450 units</p>
+                    <span class="summary-change neutral">42 SKU types</span>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-icon bins">🗄️</div>
+                <div class="summary-content">
+                    <h4>Bin Utilization</h4>
+                    <p class="summary-value">87%</p>
+                    <span class="summary-change neutral">156/180 bins active</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="charts-section">
+            <div class="chart-card">
+                <h3>Inventory Movement Trend</h3>
+                <div class="chart-placeholder">
+                    <p>📈 Chart showing incoming vs outgoing trends</p>
+                    <p class="chart-note">(Chart library integration required)</p>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>Top 10 SKUs by Volume</h3>
+                <div class="chart-placeholder">
+                    <p>📊 Bar chart of most active SKUs</p>
+                    <p class="chart-note">(Chart library integration required)</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Log Table -->
+        <div class="activity-log">
+            <h3>Recent Activity Log</h3>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Type</th>
+                            <th>SKU</th>
+                            <th>Bin ID</th>
+                            <th>Quantity</th>
+                            <th>Operator</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activity-table-body">
+                        <tr>
+                            <td>2025-10-28 14:30</td>
+                            <td><span class="badge incoming">Incoming</span></td>
+                            <td>SKU001</td>
+                            <td>BIN-A12</td>
+                            <td>50</td>
+                            <td>John Doe</td>
+                            <td><span class="status-badge complete">Complete</span></td>
+                        </tr>
+                        <tr>
+                            <td>2025-10-28 13:15</td>
+                            <td><span class="badge outgoing">Outgoing</span></td>
+                            <td>SKU002</td>
+                            <td>BIN-B05</td>
+                            <td>30</td>
+                            <td>Jane Smith</td>
+                            <td><span class="status-badge complete">Complete</span></td>
+                        </tr>
+                        <tr>
+                            <td>2025-10-28 11:45</td>
+                            <td><span class="badge incoming">Incoming</span></td>
+                            <td>SKU003</td>
+                            <td>BIN-C20</td>
+                            <td>75</td>
+                            <td>John Doe</td>
+                            <td><span class="status-badge incomplete">Incomplete</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SKU Inventory Status -->
+        <div class="sku-inventory">
+            <h3>SKU Inventory Status</h3>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>SKU</th>
+                            <th>Total Units</th>
+                            <th>Bins Used</th>
+                            <th>Oldest Entry</th>
+                            <th>Expiry Alert</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sku-table-body">
+                        <tr>
+                            <td>SKU001</td>
+                            <td>450</td>
+                            <td>12</td>
+                            <td>2025-09-15</td>
+                            <td><span class="alert-badge urgent">2 days</span></td>
+                            <td><button class="btn btn-small">View Details</button></td>
+                        </tr>
+                        <tr>
+                            <td>SKU002</td>
+                            <td>320</td>
+                            <td>8</td>
+                            <td>2025-10-01</td>
+                            <td><span class="alert-badge warning">10 days</span></td>
+                            <td><button class="btn btn-small">View Details</button></td>
+                        </tr>
+                        <tr>
+                            <td>SKU003</td>
+                            <td>180</td>
+                            <td>5</td>
+                            <td>2025-10-15</td>
+                            <td><span class="alert-badge safe">30+ days</span></td>
+                            <td><button class="btn btn-small">View Details</button></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="reports.js"></script>
+</body>
+</html>

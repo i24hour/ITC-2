@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Incoming - ITC Warehouse Management</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="logo-small">ITC</div>
+            <span>Warehouse Management</span>
+        </div>
+        <div class="nav-actions">
+            <a href="dashboard.html" class="btn btn-secondary">← Back to Dashboard</a>
+            <button class="btn btn-text" id="logout-btn">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Step 1: Enter SKU Details -->
+        <div id="step1" class="step-container active">
+            <header class="page-header">
+                <h1>📥 Incoming Inventory</h1>
+                <p class="page-subtitle">Enter SKU details to place items in bins</p>
+            </header>
+
+            <div class="form-card">
+                <form id="incoming-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="sku-input">Enter SKU</label>
+                            <select id="sku-input" required>
+                                <option value="">Select a SKU...</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="cfc-count">Enter No. of CFCs</label>
+                            <input type="number" id="cfc-count" placeholder="e.g., 50" min="1" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="weight-input">Weight (kg)</label>
+                            <input type="number" id="weight-input" placeholder="e.g., 25.5" min="0" step="0.1" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-lg">Proceed to Bin Selection</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Step 2: Select Bins -->
+        <div id="step2" class="step-container">
+            <header class="page-header">
+                <h1>Select Bins for Storage</h1>
+                <p class="page-subtitle">SKU: <span id="display-sku"></span> | Quantity: <span id="display-qty"></span> CFCs</p>
+            </header>
+
+            <div class="bin-info-summary">
+                <div class="info-item">
+                    <span class="info-label">Total Required:</span>
+                    <span class="info-value" id="total-required">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Currently Selected:</span>
+                    <span class="info-value" id="total-selected">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Remaining:</span>
+                    <span class="info-value" id="total-remaining">0</span>
+                </div>
+            </div>
+
+            <div class="bin-categories">
+                <div class="bin-category">
+                    <h3>🟡 Partially Filled Bins (Same SKU)</h3>
+                    <div id="partial-bins-grid" class="bins-grid">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+
+                <div class="bin-category">
+                    <h3>⬜ Empty Bins</h3>
+                    <div id="empty-bins-grid" class="bins-grid">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-secondary" id="back-to-form">← Back</button>
+                <button class="btn btn-primary btn-lg" id="proceed-to-scan" disabled>Proceed to Scanning</button>
+            </div>
+        </div>
+
+        <!-- Step 3: QR Scanner -->
+        <div id="step3" class="step-container">
+            <header class="page-header">
+                <h1>🎯 Scan Bin QR Codes</h1>
+                <p class="page-subtitle">Scan each bin to confirm placement</p>
+            </header>
+
+            <div class="scanner-container">
+                <div class="scanner-section">
+                    <div class="scanner-header">
+                        <h3>📷 QR Code Scanner</h3>
+                        <button class="btn btn-small" id="toggle-camera">Switch Camera</button>
+                    </div>
+                    <div id="qr-reader" class="qr-reader"></div>
+                    <div class="scanner-status">
+                        <p id="scan-status">Ready to scan...</p>
+                    </div>
+                </div>
+
+                <div class="scan-lists">
+                    <div class="scan-list incomplete-list">
+                        <h3>⏳ Bins Pending to Fill</h3>
+                        <div id="incomplete-bins" class="bin-items">
+                            <!-- Populated from selection -->
+                        </div>
+                    </div>
+
+                    <div class="scan-list complete-list">
+                        <h3>✅ Bins Filled Successfully</h3>
+                        <div id="complete-bins" class="bin-items">
+                            <!-- Populated on scan -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-secondary" id="cancel-scan">Cancel</button>
+                <button class="btn btn-success btn-lg" id="complete-incoming" style="display: none;">Complete & Return to Dashboard</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="incoming.js"></script>
+</body>
+</html>
