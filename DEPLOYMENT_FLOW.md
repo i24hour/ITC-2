@@ -130,6 +130,7 @@ git push origin main
 ```
 
 Azure automatically:
+
 1. ✅ Detects the push within seconds
 2. ✅ Downloads your code from GitHub
 3. ✅ Installs dependencies (npm install)
@@ -142,16 +143,17 @@ Azure automatically:
 
 ## 💰 Monthly Cost Breakdown
 
-| What | Where | Cost |
-|------|-------|------|
-| PostgreSQL Database | Azure | $12/month |
-| Web App Hosting | Azure | $13/month |
-| GitHub Repository | GitHub | Free |
-| SSL Certificate | Azure | Free |
-| Auto-deployment | GitHub + Azure | Free |
-| **Total** | | **$25/month** |
+| What                | Where          | Cost          |
+| ------------------- | -------------- | ------------- |
+| PostgreSQL Database | Azure          | $12/month     |
+| Web App Hosting     | Azure          | $13/month     |
+| GitHub Repository   | GitHub         | Free          |
+| SSL Certificate     | Azure          | Free          |
+| Auto-deployment     | GitHub + Azure | Free          |
+| **Total**           |                | **$25/month** |
 
 💡 **Free Alternative for Testing:**
+
 - Use Azure Free Tier (F1) for Web App: $0/month
 - PostgreSQL B1ms: $12/month (minimum)
 - **Total: $12/month**
@@ -167,6 +169,7 @@ https://github.com/new
 https://portal.azure.com
 
 **After Deployment:**
+
 - Your App: `https://itc-warehouse-app-2025.azurewebsites.net`
 - GitHub Repo: `https://github.com/YOUR-USERNAME/ITC-2`
 
@@ -184,18 +187,22 @@ https://portal.azure.com
 ## 🆘 Need Help?
 
 **Stuck on Step 1 (GitHub)?**
+
 - Go to: https://github.com/new
 - Follow the instructions shown after creating repository
 
 **Stuck on Step 2 (Azure)?**
+
 - Read: GITHUB_DEPLOYMENT_GUIDE.md
 - Screenshots available in Azure Portal help section
 
 **Deployment Failed?**
+
 - Check: Web App → Deployment Center → Logs
 - View: Web App → Log stream
 
 **Questions?**
+
 - Azure Support: https://azure.microsoft.com/support/
 - GitHub Help: https://docs.github.com
 
