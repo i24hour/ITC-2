@@ -1005,7 +1005,7 @@ app.post('/api/bins/scan-deduct', async (req, res) => {
   }
 });
 
-// Secure scan endpoint: validates sessionToken against task and deducts only the quantity assigned to that bin in the task
+// Secure scan endpoint: validates sessionToken against task and deducts/adds quantity based on task type
 app.post('/api/bins/scan', async (req, res) => {
   const client = await db.getClient();
 
@@ -1047,51 +1047,101 @@ app.post('/api/bins/scan', async (req, res) => {
       return res.status(400).json({ error: 'Bin not part of this task or no quantity assigned for this bin' });
     }
 
-    const qtyToDeduct = binMap[binId];
-    if (qtyToDeduct <= 0) {
-      return res.status(400).json({ error: 'No quantity to deduct for this bin' });
+    const qtyToProcess = binMap[binId];
+    if (qtyToProcess <= 0) {
+      return res.status(400).json({ error: 'No quantity to process for this bin' });
     }
 
     await client.query('BEGIN');
 
-    // Find inventory row for this bin and task.sku
-    const invRes = await client.query(
-      `SELECT * FROM inventory WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
-      [binId, task.sku]
-    );
+    const isIncoming = task.type === 'incoming';
+    const isOutgoing = task.type === 'outgoing';
 
-    if (invRes.rows.length === 0) {
+    if (isOutgoing) {
+      // OUTGOING: Deduct from bin
+      // Find inventory row for this bin and task.sku
+      const invRes = await client.query(
+        `SELECT * FROM inventory WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
+        [binId, task.sku]
+      );
+
+      if (invRes.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Bin with SKU not found', binId, sku: task.sku });
+      }
+
+      const currentRow = invRes.rows[0];
+      const currentCFC = currentRow.cfc;
+      const uom = currentRow.uom;
+
+      if (currentCFC < qtyToProcess) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Insufficient quantity in bin', available: currentCFC, requested: qtyToProcess });
+      }
+
+      const newCFC = Math.max(0, currentCFC - qtyToProcess);
+      const newQTY = newCFC * uom;
+
+      // Update inventory
+      await client.query(
+        `UPDATE inventory SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP WHERE bin_no = $3 AND sku = $4`,
+        [newCFC, newQTY, binId, task.sku]
+      );
+
+      // Log transaction
+      await client.query(
+        `INSERT INTO transactions (transaction_type, bin_id, sku, quantity, operator, previous_value, new_value)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        ['outgoing_scan', binId, task.sku, qtyToProcess, sessionValidation.session.user_name || task.operator || 'unknown', currentCFC, newCFC]
+      );
+
+    } else if (isIncoming) {
+      // INCOMING: Add to bin
+      // Check if row exists
+      const invRes = await client.query(
+        `SELECT * FROM inventory WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
+        [binId, task.sku]
+      );
+
+      let currentCFC = 0;
+      let newCFC = qtyToProcess;
+      const uom = 2.0; // Default UOM
+
+      if (invRes.rows.length > 0) {
+        // Update existing row
+        const currentRow = invRes.rows[0];
+        currentCFC = currentRow.cfc;
+        newCFC = currentCFC + qtyToProcess;
+        const existingUom = currentRow.uom || uom;
+
+        await client.query(
+          `UPDATE inventory 
+           SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP
+           WHERE bin_no = $3 AND sku = $4`,
+          [newCFC, newCFC * existingUom, binId, task.sku]
+        );
+      } else {
+        // Insert new row
+        const batchNo = 'NEW' + new Date().toISOString().slice(2, 10).replace(/-/g, '');
+        await client.query(
+          `INSERT INTO inventory (bin_no, sku, batch_no, cfc, uom, qty)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [binId, task.sku, batchNo, newCFC, uom, newCFC * uom]
+        );
+      }
+
+      // Log transaction
+      await client.query(
+        `INSERT INTO transactions (transaction_type, bin_id, sku, quantity, operator, previous_value, new_value)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        ['incoming_scan', binId, task.sku, qtyToProcess, sessionValidation.session.user_name || task.operator || 'unknown', currentCFC, newCFC]
+      );
+    } else {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Bin with SKU not found', binId, sku: task.sku });
+      return res.status(400).json({ error: 'Invalid task type', type: task.type });
     }
-
-    const currentRow = invRes.rows[0];
-    const currentCFC = currentRow.cfc;
-    const uom = currentRow.uom;
-
-    if (currentCFC < qtyToDeduct) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Insufficient quantity in bin', available: currentCFC, requested: qtyToDeduct });
-    }
-
-    const newCFC = Math.max(0, currentCFC - qtyToDeduct);
-    const newQTY = newCFC * uom;
-
-    // Update inventory
-    await client.query(
-      `UPDATE inventory SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP WHERE bin_no = $3 AND sku = $4`,
-      [newCFC, newQTY, binId, task.sku]
-    );
-
-    // Log transaction with operator from validated session
-    await client.query(
-      `INSERT INTO transactions (transaction_type, bin_id, sku, quantity, operator, previous_value, new_value)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      ['outgoing_scan', binId, task.sku, qtyToDeduct, sessionValidation.session.user_name || task.operator || 'unknown', currentCFC, newCFC]
-    );
 
     // Mark this bin as scanned in the task (add to scanned_bins column)
-    // Format: scanned_bins stores comma-separated list of scanned bin IDs
     try {
       await client.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS scanned_bins TEXT DEFAULT ''`);
     } catch (err) {
@@ -1114,12 +1164,20 @@ app.post('/api/bins/scan', async (req, res) => {
     const scannedCount = scannedBins.length;
     const progress = Math.round((scannedCount / totalBins) * 100);
 
+    // Get updated inventory for response
+    const updatedInv = await client.query(
+      `SELECT cfc FROM inventory WHERE bin_no = $1 AND sku = $2`,
+      [binId, task.sku]
+    );
+    const finalCFC = updatedInv.rows.length > 0 ? updatedInv.rows[0].cfc : 0;
+
     return res.json({ 
       success: true, 
       binId, 
-      sku: task.sku, 
-      deducted: qtyToDeduct, 
-      remaining: newCFC,
+      sku: task.sku,
+      taskType: task.type,
+      processed: qtyToProcess, 
+      remaining: finalCFC,
       operator: sessionValidation.session.user_name,
       progress: {
         scannedBins: scannedCount,

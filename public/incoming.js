@@ -201,7 +201,10 @@ async function goToStep3() {
 async function createTask() {
     try {
         const user = JSON.parse(localStorage.getItem('user'));
-        const binNos = selectedBins.map(b => b.id).join(', ');
+        // Format: binId:quantity pairs (e.g., "F37:10,G13:5")
+        // For incoming, distribute quantity equally or use specified amounts per bin
+        const qtyPerBin = Math.ceil(incomingData.quantity / selectedBins.length);
+        const binDetails = selectedBins.map(b => `${b.id}:${qtyPerBin}`).join(',');
         
         const response = await fetch('/api/tasks/create', {
             method: 'POST',
@@ -209,16 +212,17 @@ async function createTask() {
             body: JSON.stringify({
                 operator: user.name || user.email,
                 sku: incomingData.sku,
-                binNo: binNos,
+                binNo: binDetails,
                 quantity: incomingData.quantity,
-                type: 'incoming'
+                type: 'incoming',
+                sessionToken: user.sessionToken || null
             })
         });
         
         const result = await response.json();
         if (result.success) {
             currentTaskId = result.task.id;
-            console.log('Task created:', currentTaskId);
+            console.log('Incoming task created:', currentTaskId);
         }
     } catch (error) {
         console.error('Error creating task:', error);
@@ -439,20 +443,31 @@ function onScanError(errorMessage) {
 async function updateBinInDatabase(binId) {
     try {
         const bin = selectedBins.find(b => b.id === binId);
-        const response = await fetch('/api/bins/update', {
+        const user = JSON.parse(localStorage.getItem('user')) || {};
+
+        // Use secure scan API which validates sessionToken and task
+        const response = await fetch('/api/bins/scan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 binId,
-                sku: incomingData.sku,
-                quantity: bin.available,
-                weight: incomingData.weight
+                taskId: currentTaskId,
+                sessionToken: user.sessionToken || null
             })
         });
+
         const result = await response.json();
-        console.log('Bin updated:', result);
+        if (result.success) {
+            console.log('Bin updated via secure scan:', result);
+        } else {
+            console.warn('Bin update failed:', result);
+            document.getElementById('scan-status').textContent = `❌ Error: ${result.error || 'Update failed'}`;
+            document.getElementById('scan-status').style.color = 'red';
+        }
     } catch (error) {
         console.error('Error updating bin:', error);
+        document.getElementById('scan-status').textContent = `❌ Network error. Please try again.`;
+        document.getElementById('scan-status').style.color = 'red';
     }
 }
 
