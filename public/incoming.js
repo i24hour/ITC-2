@@ -95,8 +95,11 @@ async function loadAvailableBins() {
         const response = await fetch(`/api/bins/available?sku=${incomingData.sku}`);
         const data = await response.json();
         
-        renderBins(data.partialBins, 'partial-bins-grid');
-        renderBins(data.emptyBins, 'empty-bins-grid');
+        // Combine partial and full bins with same SKU
+        const sameSKUBins = [...(data.partialBins || []), ...(data.fullBins || [])];
+        
+        renderBins(sameSKUBins, 'partial-bins-grid');
+        renderBins(data.emptyBins || [], 'empty-bins-grid');
     } catch (error) {
         console.error('Error loading bins:', error);
         // Fallback to mock data if API fails

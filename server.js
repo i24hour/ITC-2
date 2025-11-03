@@ -344,29 +344,39 @@ app.get('/api/bins/available', async (req, res) => {
   try {
     const { sku } = req.query;
     
-    // Get bins with the requested SKU
+    // Get ALL bins with the requested SKU (same logic as FIFO for consistency)
     const result = await db.query(
-      `SELECT bin_no, sku, cfc, qty FROM inventory WHERE sku = $1`,
+      `SELECT bin_no, sku, cfc, qty, batch_no, created_at FROM inventory WHERE sku = $1 ORDER BY created_at ASC`,
       [sku]
     );
     
     const partialBins = [];
+    const fullBins = [];
     const capacity = 50; // Default capacity per bin
     
     result.rows.forEach(row => {
       const currentQty = row.cfc;
+      const available = capacity - currentQty;
+      
+      const binData = {
+        id: row.bin_no,
+        sku: sku,
+        current: currentQty,
+        capacity: capacity,
+        available: Math.max(0, available),
+        batch: row.batch_no
+      };
+      
       if (currentQty > 0 && currentQty < capacity) {
-        partialBins.push({
-          id: row.bin_no,
-          sku: sku,
-          current: currentQty,
-          capacity: capacity,
-          available: capacity - currentQty
-        });
+        // Partially filled - can add more
+        partialBins.push(binData);
+      } else if (currentQty >= capacity) {
+        // Full bin - still show it for incoming (in case they want to overfill)
+        fullBins.push(binData);
       }
     });
     
-    // Get all unique bins
+    // Get all unique empty bins (bins that don't have any inventory)
     const allBinsResult = await db.query(
       `SELECT DISTINCT bin_no FROM inventory ORDER BY bin_no`
     );
@@ -391,7 +401,8 @@ app.get('/api/bins/available', async (req, res) => {
       }
     });
     
-    res.json({ partialBins, emptyBins });
+    // Return all bins with same SKU (partial + full) plus empty bins
+    res.json({ partialBins, fullBins, emptyBins });
   } catch (error) {
     console.error('Error fetching available bins:', error);
     res.status(500).json({ error: error.message });
