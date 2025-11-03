@@ -664,17 +664,24 @@ app.post('/api/supervisor/cancel-task', async (req, res) => {
 // Create a new task
 app.post('/api/tasks/create', async (req, res) => {
   try {
-    const { operator, sku, binNo, quantity, type } = req.body;
+    const { operator, sku, binNo, quantity, type, sessionToken } = req.body;
     
     if (!operator || !sku || !binNo || !quantity || !type) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
+    // Ensure tasks table has session_token column (backwards-compatible)
+    try {
+      await db.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS session_token VARCHAR(255)`);
+    } catch (err) {
+      console.warn('Could not add session_token column (may already exist):', err.message);
+    }
+
     const result = await db.query(
-      `INSERT INTO tasks (operator, sku, bin_no, quantity, task_type, status)
-       VALUES ($1, $2, $3, $4, $5, 'ongoing')
+      `INSERT INTO tasks (operator, sku, bin_no, quantity, task_type, status, session_token)
+       VALUES ($1, $2, $3, $4, $5, 'ongoing', $6)
        RETURNING *`,
-      [operator, sku, binNo, parseInt(quantity), type]
+      [operator, sku, binNo, parseInt(quantity), type, sessionToken || null]
     );
     
     res.json({
@@ -766,6 +773,188 @@ app.get('/api/tasks/check/:taskId', async (req, res) => {
 });
 
 // ==================== BIN QR CODE GENERATION ====================
+
+// Secure scan-based bin deduction
+app.post('/api/bins/scan-deduct', async (req, res) => {
+  const client = await db.getClient();
+  
+  try {
+    const { binId, sku, quantity, sessionToken, operator } = req.body;
+    
+    // Validate required fields
+    if (!binId || !sku || !quantity || !sessionToken || !operator) {
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        required: ['binId', 'sku', 'quantity', 'sessionToken', 'operator']
+      });
+    }
+    
+    // TODO: Validate session token (in production, store tokens in database)
+    // For now, we just check if token exists and has correct format
+    if (!sessionToken.startsWith('session_')) {
+      return res.status(401).json({ error: 'Invalid session token' });
+    }
+    
+    await client.query('BEGIN');
+    
+    // Find the bin with SKU
+    const result = await client.query(
+      `SELECT * FROM inventory WHERE bin_no = $1 AND sku = $2`,
+      [binId, sku]
+    );
+    
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ 
+        error: 'Bin with SKU not found',
+        binId,
+        sku
+      });
+    }
+    
+    const currentRow = result.rows[0];
+    const currentCFC = currentRow.cfc;
+    const uom = currentRow.uom;
+    
+    // Check if sufficient quantity available
+    if (currentCFC < parseInt(quantity)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        error: 'Insufficient quantity in bin',
+        available: currentCFC,
+        requested: parseInt(quantity)
+      });
+    }
+    
+    const newCFC = Math.max(0, currentCFC - parseInt(quantity));
+    const newQTY = newCFC * uom;
+    
+    // Update inventory
+    await client.query(
+      `UPDATE inventory 
+       SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP
+       WHERE bin_no = $3 AND sku = $4`,
+      [newCFC, newQTY, binId, sku]
+    );
+    
+    // Log transaction
+    await client.query(
+      `INSERT INTO transactions (transaction_type, bin_id, sku, quantity, operator, previous_value, new_value)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      ['outgoing_scan', binId, sku, parseInt(quantity), operator, currentCFC, newCFC]
+    );
+    
+    await client.query('COMMIT');
+    
+    res.json({ 
+      success: true,
+      binId,
+      sku,
+      operator,
+      deducted: parseInt(quantity),
+      previousQty: currentCFC,
+      remainingQty: newCFC,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error in scan-deduct:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Secure scan endpoint: validates sessionToken against task and deducts only the quantity assigned to that bin in the task
+app.post('/api/bins/scan', async (req, res) => {
+  const client = await db.getClient();
+
+  try {
+    const { binId, taskId, sessionToken } = req.body;
+
+    if (!binId || !taskId || !sessionToken) {
+      return res.status(400).json({ error: 'Missing required fields', required: ['binId','taskId','sessionToken'] });
+    }
+
+    // Fetch task
+    const taskResult = await db.query(`SELECT * FROM tasks WHERE id = $1`, [parseInt(taskId)]);
+    if (taskResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const task = taskResult.rows[0];
+
+    // Validate session token matches the task's session_token
+    if (!task.session_token || task.session_token !== sessionToken) {
+      return res.status(401).json({ error: 'Invalid or mismatched session token' });
+    }
+
+    // Parse bin list saved on task: format binId:qty,bin2:qty
+    const binList = (task.bin_no || '').split(',').map(item => item.trim()).filter(Boolean);
+    const binMap = {};
+    binList.forEach(pair => {
+      const [b, q] = pair.split(':');
+      if (b) binMap[b] = parseInt(q) || 0;
+    });
+
+    if (!binMap[binId]) {
+      return res.status(400).json({ error: 'Bin not part of this task or no quantity assigned for this bin' });
+    }
+
+    const qtyToDeduct = binMap[binId];
+    if (qtyToDeduct <= 0) {
+      return res.status(400).json({ error: 'No quantity to deduct for this bin' });
+    }
+
+    await client.query('BEGIN');
+
+    // Find inventory row for this bin and task.sku
+    const invRes = await client.query(
+      `SELECT * FROM inventory WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
+      [binId, task.sku]
+    );
+
+    if (invRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Bin with SKU not found', binId, sku: task.sku });
+    }
+
+    const currentRow = invRes.rows[0];
+    const currentCFC = currentRow.cfc;
+    const uom = currentRow.uom;
+
+    if (currentCFC < qtyToDeduct) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Insufficient quantity in bin', available: currentCFC, requested: qtyToDeduct });
+    }
+
+    const newCFC = Math.max(0, currentCFC - qtyToDeduct);
+    const newQTY = newCFC * uom;
+
+    // Update inventory
+    await client.query(
+      `UPDATE inventory SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP WHERE bin_no = $3 AND sku = $4`,
+      [newCFC, newQTY, binId, task.sku]
+    );
+
+    // Log transaction
+    await client.query(
+      `INSERT INTO transactions (transaction_type, bin_id, sku, quantity, operator, previous_value, new_value)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      ['outgoing_scan', binId, task.sku, qtyToDeduct, task.operator || 'unknown', currentCFC, newCFC]
+    );
+
+    await client.query('COMMIT');
+
+    return res.json({ success: true, binId, sku: task.sku, deducted: qtyToDeduct, remaining: newCFC });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error in /api/bins/scan:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
 
 // Generate QR code for a specific bin
 app.get('/api/bins/qr/:binNo', async (req, res) => {

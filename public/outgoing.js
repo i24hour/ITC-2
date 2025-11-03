@@ -110,34 +110,7 @@ async function loadFIFOBins() {
             ...bin,
             toDispatch: 0
         }));
-        
-        // Reset selection
-        selectedBins = new Map();
-        totalSelectedCFC = 0;
-        
-        // Update UI
-        document.getElementById('selected-bins-count').textContent = '0';
-        document.getElementById('total-available').textContent = totalAvailable.toFixed(0) + ' cartons';
-        
-        // Show info message
-        const container = document.getElementById('fifo-bins-list').parentElement;
-        const existingMsg = container.querySelector('.info-message');
-        if (existingMsg) existingMsg.remove();
-        
-        const infoMsg = document.createElement('div');
-        infoMsg.className = 'info-message';
-        infoMsg.style.cssText = 'background: #2196F3; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-weight: bold;';
-        infoMsg.innerHTML = `📦 Select bins to dispatch ${outgoingData.quantity} cartons. Total available: ${totalAvailable.toFixed(0)} cartons in ${fifoBins.length} bin(s)`;
-        container.insertBefore(infoMsg, document.getElementById('fifo-bins-list'));
-        
-        // Add selection status
-        const statusDiv = document.createElement('div');
-        statusDiv.id = 'selection-status';
-        statusDiv.style.cssText = 'background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 20px; font-weight: bold; text-align: center;';
-        statusDiv.innerHTML = `Total Selected: <span id="selected-cfc" style="color: #2196F3; font-size: 24px;">0</span> / <span style="color: #4CAF50; font-size: 24px;">${outgoingData.quantity}</span> cartons`;
-        container.insertBefore(statusDiv, document.getElementById('fifo-bins-list'));
-        
-        // Render FIFO bins with quantity inputs
+
         renderFIFOBins();
     } catch (error) {
         console.error('Error loading FIFO bins:', error);
@@ -333,17 +306,20 @@ async function goToStep3Outgoing() {
 async function createOutgoingTask() {
     try {
         const user = JSON.parse(localStorage.getItem('user'));
-        const binNos = fifoBins.map(b => b.id).join(', ');
-        
+        // Prepare bin details as binId:quantity pairs
+        // e.g., F37:7,G13:3
+        const binDetails = fifoBins.map(b => `${b.id}:${b.toDispatch}`).join(',');
+
         const response = await fetch('/api/tasks/create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 operator: user.name || user.email,
                 sku: outgoingData.sku,
-                binNo: binNos,
+                binNo: binDetails,
                 quantity: outgoingData.quantity,
-                type: 'outgoing'
+                type: 'outgoing',
+                sessionToken: user.sessionToken || null
             })
         });
         
@@ -461,20 +437,31 @@ function onScanErrorOutgoing(errorMessage) {
 async function dispatchBinInDatabase(binId) {
     try {
         const bin = fifoBins.find(b => b.id === binId);
-        const response = await fetch('/api/bins/dispatch', {
+        const user = JSON.parse(localStorage.getItem('user')) || {};
+
+        // Use secure scan API which validates sessionToken and task
+        const response = await fetch('/api/bins/scan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 binId,
-                sku: outgoingData.sku,
-                quantity: bin.toDispatch, // Use the selected quantity for this bin
-                batch: outgoingData.batch
+                taskId: currentTaskId,
+                sessionToken: user.sessionToken || null
             })
         });
+
         const result = await response.json();
-        console.log('Bin dispatched:', result);
+        if (result.success) {
+            console.log('Bin dispatched via secure scan:', result);
+        } else {
+            console.warn('Dispatch failed:', result);
+            document.getElementById('scan-status-out').textContent = `❌ Error: ${result.error || 'Dispatch failed'}`;
+            document.getElementById('scan-status-out').style.color = 'red';
+        }
     } catch (error) {
         console.error('Error dispatching bin:', error);
+        document.getElementById('scan-status-out').textContent = `❌ Network error. Please try again.`;
+        document.getElementById('scan-status-out').style.color = 'red';
     }
 }
 

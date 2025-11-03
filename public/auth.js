@@ -33,12 +33,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // TODO: Replace with actual authentication API call
         console.log('Login attempt:', { email, password, role });
 
+        // Generate unique session token
+        const sessionToken = generateSessionToken();
+
         // Simulate successful login
         localStorage.setItem('user', JSON.stringify({ 
             email, 
             name: email.split('@')[0],
             role: role,
-            loggedIn: true 
+            loggedIn: true,
+            sessionToken: sessionToken,
+            loginTime: new Date().toISOString()
         }));
         
         // Redirect to dashboard
@@ -64,15 +69,38 @@ document.addEventListener('DOMContentLoaded', () => {
         // TODO: Replace with actual registration API call
         console.log('Signup attempt:', { name, email, password, role });
 
+        // Generate unique session token
+        const sessionToken = generateSessionToken();
+
         // Simulate successful signup
         localStorage.setItem('user', JSON.stringify({ 
             email, 
             name,
             role: role,
-            loggedIn: true 
+            loggedIn: true,
+            sessionToken: sessionToken,
+            loginTime: new Date().toISOString()
         }));
         
         // Redirect to dashboard
         window.location.href = 'dashboard.html';
     });
 });
+
+// Generate unique session token
+function generateSessionToken() {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 15);
+    const userAgent = navigator.userAgent;
+    const combined = `${timestamp}-${random}-${userAgent}`;
+    
+    // Simple hash function
+    let hash = 0;
+    for (let i = 0; i < combined.length; i++) {
+        const char = combined.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    return `session_${Math.abs(hash)}_${timestamp}`;
+}
