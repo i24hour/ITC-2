@@ -352,6 +352,7 @@ app.get('/api/bins/available', async (req, res) => {
     
     const partialBins = [];
     const fullBins = [];
+    const emptyBins = [];
     const capacity = 50; // Default capacity per bin
     
     result.rows.forEach(row => {
@@ -367,7 +368,10 @@ app.get('/api/bins/available', async (req, res) => {
         batch: row.batch_no
       };
       
-      if (currentQty > 0 && currentQty < capacity) {
+      if (currentQty === 0) {
+        // Empty bin with same SKU - ready to be filled
+        emptyBins.push(binData);
+      } else if (currentQty > 0 && currentQty < capacity) {
         // Partially filled - can add more
         partialBins.push(binData);
       } else if (currentQty >= capacity) {
@@ -376,21 +380,18 @@ app.get('/api/bins/available', async (req, res) => {
       }
     });
     
-    // Get all unique empty bins (bins that don't have any inventory)
+    // Get bins that are completely empty (not even in inventory table yet)
     const allBinsResult = await db.query(
       `SELECT DISTINCT bin_no FROM inventory ORDER BY bin_no`
     );
     
-    const usedBinsResult = await db.query(
-      `SELECT DISTINCT bin_no FROM inventory WHERE cfc > 0`
-    );
-    
     const allBins = new Set(allBinsResult.rows.map(row => row.bin_no));
-    const usedBins = new Set(usedBinsResult.rows.map(row => row.bin_no));
     
-    const emptyBins = [];
+    // Add truly empty bins (not in inventory table at all)
     allBins.forEach(binNo => {
-      if (!usedBins.has(binNo)) {
+      // Check if this bin is already in our lists
+      const alreadyIncluded = [...partialBins, ...fullBins, ...emptyBins].some(b => b.id === binNo);
+      if (!alreadyIncluded) {
         emptyBins.push({
           id: binNo,
           sku: null,
@@ -401,7 +402,7 @@ app.get('/api/bins/available', async (req, res) => {
       }
     });
     
-    // Return all bins with same SKU (partial + full) plus empty bins
+    // Return all bins with same SKU (partial + full + empty with same SKU) plus truly empty bins
     res.json({ partialBins, fullBins, emptyBins });
   } catch (error) {
     console.error('Error fetching available bins:', error);
