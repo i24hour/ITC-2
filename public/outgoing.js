@@ -86,8 +86,8 @@ async function goToStep2Outgoing() {
     initStep2Outgoing();
 }
 
-// Track selected bins
-let selectedBins = new Set();
+// Track selected bins with quantities
+let selectedBins = new Map(); // Map of binId -> selectedQuantity
 let totalSelectedCFC = 0;
 
 async function loadFIFOBins() {
@@ -112,7 +112,7 @@ async function loadFIFOBins() {
         }));
         
         // Reset selection
-        selectedBins = new Set();
+        selectedBins = new Map();
         totalSelectedCFC = 0;
         
         // Update UI
@@ -133,11 +133,11 @@ async function loadFIFOBins() {
         // Add selection status
         const statusDiv = document.createElement('div');
         statusDiv.id = 'selection-status';
-        statusDiv.style.cssText = 'background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 18px; font-weight: bold; text-align: center;';
-        statusDiv.innerHTML = `Selected: <span id="selected-cfc">0</span> / ${outgoingData.quantity} cartons`;
+        statusDiv.style.cssText = 'background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 20px; font-weight: bold; text-align: center;';
+        statusDiv.innerHTML = `Total Selected: <span id="selected-cfc" style="color: #2196F3; font-size: 24px;">0</span> / <span style="color: #4CAF50; font-size: 24px;">${outgoingData.quantity}</span> cartons`;
         container.insertBefore(statusDiv, document.getElementById('fifo-bins-list'));
         
-        // Render FIFO bins with checkboxes
+        // Render FIFO bins with quantity inputs
         renderFIFOBins();
     } catch (error) {
         console.error('Error loading FIFO bins:', error);
@@ -150,19 +150,20 @@ function renderFIFOBins() {
     container.innerHTML = '';
     
     fifoBins.forEach((bin, index) => {
+        const binAvailable = Math.round(bin.quantity);
+        const binSelected = selectedBins.get(bin.id) || 0;
+        const remainingCFC = outgoingData.quantity - totalSelectedCFC;
+        const maxAllowed = Math.min(binAvailable, remainingCFC + binSelected);
+        
         const binItem = document.createElement('div');
         binItem.className = 'fifo-bin-item';
         binItem.dataset.binId = bin.id;
-        binItem.style.cssText = 'display: flex; align-items: center; gap: 15px; padding: 15px; border: 2px solid #ddd; border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: all 0.3s;';
+        binItem.style.cssText = 'display: flex; align-items: center; gap: 15px; padding: 15px; border: 2px solid #ddd; border-radius: 8px; margin-bottom: 10px; transition: all 0.3s;';
         
-        // Checkbox
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.id = `bin-checkbox-${bin.id}`;
-        checkbox.style.cssText = 'width: 24px; height: 24px; cursor: pointer;';
-        checkbox.addEventListener('change', (e) => {
-            toggleBinSelection(bin, e.target.checked);
-        });
+        if (binSelected > 0) {
+            binItem.style.borderColor = '#4CAF50';
+            binItem.style.backgroundColor = '#e8f5e9';
+        }
         
         // Bin info
         const infoDiv = document.createElement('div');
@@ -173,45 +174,101 @@ function renderFIFOBins() {
             ${bin.batch ? `<div class="fifo-bin-batch" style="color: #666; font-size: 14px;">Batch: ${bin.batch}</div>` : ''}
         `;
         
-        // Quantity
-        const qtyDiv = document.createElement('div');
-        qtyDiv.style.cssText = 'font-weight: bold; font-size: 20px; color: #4CAF50;';
-        qtyDiv.textContent = `${Math.round(bin.quantity)} cartons`;
+        // Quantity selector
+        const qtyControlDiv = document.createElement('div');
+        qtyControlDiv.style.cssText = 'display: flex; flex-direction: column; align-items: center; gap: 8px;';
         
-        binItem.appendChild(checkbox);
-        binItem.appendChild(infoDiv);
-        binItem.appendChild(qtyDiv);
+        // Selected / Available display
+        const qtyStatusDiv = document.createElement('div');
+        qtyStatusDiv.style.cssText = 'font-weight: bold; font-size: 18px;';
+        qtyStatusDiv.innerHTML = `<span style="color: ${binSelected > 0 ? '#4CAF50' : '#999'};" id="bin-selected-${bin.id}">${binSelected}</span> / <span style="color: #666;">${binAvailable}</span>`;
         
-        // Click on item to toggle checkbox
-        binItem.addEventListener('click', (e) => {
-            if (e.target !== checkbox) {
-                checkbox.checked = !checkbox.checked;
-                toggleBinSelection(bin, checkbox.checked);
-            }
+        // Quantity input with +/- buttons
+        const inputGroupDiv = document.createElement('div');
+        inputGroupDiv.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+        
+        const minusBtn = document.createElement('button');
+        minusBtn.textContent = '−';
+        minusBtn.style.cssText = 'width: 35px; height: 35px; font-size: 20px; font-weight: bold; border: 2px solid #ddd; border-radius: 5px; background: white; cursor: pointer; transition: all 0.2s;';
+        minusBtn.disabled = binSelected === 0;
+        if (binSelected === 0) {
+            minusBtn.style.opacity = '0.3';
+            minusBtn.style.cursor = 'not-allowed';
+        }
+        minusBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            updateBinQuantity(bin, binSelected - 1);
         });
+        
+        const qtyInput = document.createElement('input');
+        qtyInput.type = 'number';
+        qtyInput.min = '0';
+        qtyInput.max = maxAllowed.toString();
+        qtyInput.value = binSelected.toString();
+        qtyInput.id = `bin-qty-${bin.id}`;
+        qtyInput.style.cssText = 'width: 60px; height: 35px; text-align: center; font-size: 16px; font-weight: bold; border: 2px solid #ddd; border-radius: 5px;';
+        qtyInput.addEventListener('input', (e) => {
+            let val = parseInt(e.target.value) || 0;
+            if (val < 0) val = 0;
+            if (val > maxAllowed) val = maxAllowed;
+            e.target.value = val;
+            updateBinQuantity(bin, val);
+        });
+        qtyInput.addEventListener('click', (e) => e.stopPropagation());
+        
+        const plusBtn = document.createElement('button');
+        plusBtn.textContent = '+';
+        plusBtn.style.cssText = 'width: 35px; height: 35px; font-size: 20px; font-weight: bold; border: 2px solid #4CAF50; border-radius: 5px; background: white; color: #4CAF50; cursor: pointer; transition: all 0.2s;';
+        plusBtn.disabled = binSelected >= maxAllowed;
+        if (binSelected >= maxAllowed) {
+            plusBtn.style.opacity = '0.3';
+            plusBtn.style.cursor = 'not-allowed';
+        }
+        plusBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            updateBinQuantity(bin, binSelected + 1);
+        });
+        
+        inputGroupDiv.appendChild(minusBtn);
+        inputGroupDiv.appendChild(qtyInput);
+        inputGroupDiv.appendChild(plusBtn);
+        
+        qtyControlDiv.appendChild(qtyStatusDiv);
+        qtyControlDiv.appendChild(inputGroupDiv);
+        
+        binItem.appendChild(infoDiv);
+        binItem.appendChild(qtyControlDiv);
         
         container.appendChild(binItem);
     });
 }
 
-function toggleBinSelection(bin, isSelected) {
-    if (isSelected) {
-        selectedBins.add(bin.id);
-        totalSelectedCFC += Math.round(bin.quantity);
-        
-        // Highlight selected bin
-        const binItem = document.querySelector(`[data-bin-id="${bin.id}"]`);
-        binItem.style.borderColor = '#4CAF50';
-        binItem.style.backgroundColor = '#e8f5e9';
+function updateBinQuantity(bin, newQuantity) {
+    const binAvailable = Math.round(bin.quantity);
+    const currentSelected = selectedBins.get(bin.id) || 0;
+    
+    // Ensure quantity is within bounds
+    if (newQuantity < 0) newQuantity = 0;
+    if (newQuantity > binAvailable) newQuantity = binAvailable;
+    
+    // Calculate remaining CFC capacity
+    const remainingCFC = outgoingData.quantity - (totalSelectedCFC - currentSelected);
+    if (newQuantity > remainingCFC) {
+        newQuantity = remainingCFC;
+    }
+    
+    // Update total
+    totalSelectedCFC = totalSelectedCFC - currentSelected + newQuantity;
+    
+    // Update map
+    if (newQuantity > 0) {
+        selectedBins.set(bin.id, newQuantity);
     } else {
         selectedBins.delete(bin.id);
-        totalSelectedCFC -= Math.round(bin.quantity);
-        
-        // Remove highlight
-        const binItem = document.querySelector(`[data-bin-id="${bin.id}"]`);
-        binItem.style.borderColor = '#ddd';
-        binItem.style.backgroundColor = 'white';
     }
+    
+    // Re-render all bins to update max values
+    renderFIFOBins();
     
     // Update selection status
     document.getElementById('selected-cfc').textContent = totalSelectedCFC;
@@ -222,6 +279,9 @@ function toggleBinSelection(bin, isSelected) {
     if (totalSelectedCFC >= outgoingData.quantity) {
         statusDiv.style.backgroundColor = '#4CAF50';
         statusDiv.style.color = 'white';
+    } else if (totalSelectedCFC > 0) {
+        statusDiv.style.backgroundColor = '#FFF3CD';
+        statusDiv.style.color = '#856404';
     } else {
         statusDiv.style.backgroundColor = '#f5f5f5';
         statusDiv.style.color = '#333';
@@ -233,14 +293,16 @@ function toggleBinSelection(bin, isSelected) {
 
 function updateProceedButton() {
     const proceedBtn = document.getElementById('proceed-to-dispatch');
-    if (totalSelectedCFC >= outgoingData.quantity) {
+    if (totalSelectedCFC === outgoingData.quantity) {
         proceedBtn.disabled = false;
         proceedBtn.style.opacity = '1';
         proceedBtn.style.cursor = 'pointer';
+        proceedBtn.style.backgroundColor = '#4CAF50';
     } else {
         proceedBtn.disabled = true;
         proceedBtn.style.opacity = '0.5';
         proceedBtn.style.cursor = 'not-allowed';
+        proceedBtn.style.backgroundColor = '#ccc';
     }
 }
 
@@ -249,18 +311,21 @@ function initStep2Outgoing() {
         document.getElementById('step2-outgoing').classList.remove('active');
         document.getElementById('step1-outgoing').classList.add('active');
         fifoBins = [];
-        selectedBins = new Set();
+        selectedBins = new Map();
         totalSelectedCFC = 0;
     });
     
     const proceedBtn = document.getElementById('proceed-to-dispatch');
     proceedBtn.addEventListener('click', () => {
-        if (totalSelectedCFC >= outgoingData.quantity) {
-            // Filter only selected bins
-            fifoBins = fifoBins.filter(bin => selectedBins.has(bin.id));
+        if (totalSelectedCFC === outgoingData.quantity) {
+            // Update fifoBins with selected quantities
+            fifoBins = fifoBins.filter(bin => selectedBins.has(bin.id)).map(bin => ({
+                ...bin,
+                toDispatch: selectedBins.get(bin.id)
+            }));
             goToStep3Outgoing();
         } else {
-            alert(`Please select bins with at least ${outgoingData.quantity} cartons. Currently selected: ${totalSelectedCFC} cartons`);
+            alert(`Please select exactly ${outgoingData.quantity} cartons. Currently selected: ${totalSelectedCFC} cartons`);
         }
     });
     
@@ -322,7 +387,7 @@ function populateDispatchLists() {
         const item = document.createElement('div');
         item.className = 'bin-scan-item pending';
         item.dataset.binId = bin.id;
-        item.textContent = `#${index + 1} - ${bin.id} (${Math.round(bin.quantity)} cartons available)`;
+        item.textContent = `#${index + 1} - ${bin.id} (${bin.toDispatch} cartons to dispatch)`;
         incompleteContainer.appendChild(item);
     });
 }
@@ -424,7 +489,7 @@ async function dispatchBinInDatabase(binId) {
             body: JSON.stringify({
                 binId,
                 sku: outgoingData.sku,
-                quantity: outgoingData.quantity, // Use the requested quantity from user
+                quantity: bin.toDispatch, // Use the selected quantity for this bin
                 batch: outgoingData.batch
             })
         });
