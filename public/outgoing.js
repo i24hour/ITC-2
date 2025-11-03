@@ -153,16 +153,17 @@ function renderFIFOBins() {
         const binAvailable = Math.round(bin.quantity);
         const binSelected = selectedBins.get(bin.id) || 0;
         const remainingCFC = outgoingData.quantity - totalSelectedCFC;
-        const maxAllowed = Math.min(binAvailable, remainingCFC + binSelected);
+        const isClickable = remainingCFC > 0 && binSelected === 0;
         
         const binItem = document.createElement('div');
         binItem.className = 'fifo-bin-item';
         binItem.dataset.binId = bin.id;
-        binItem.style.cssText = 'display: flex; align-items: center; gap: 15px; padding: 15px; border: 2px solid #ddd; border-radius: 8px; margin-bottom: 10px; transition: all 0.3s;';
+        binItem.style.cssText = `display: flex; align-items: center; gap: 15px; padding: 15px; border: 2px solid #ddd; border-radius: 8px; margin-bottom: 10px; transition: all 0.3s; ${isClickable ? 'cursor: pointer;' : 'opacity: 0.6; cursor: not-allowed;'}`;
         
         if (binSelected > 0) {
             binItem.style.borderColor = '#4CAF50';
             binItem.style.backgroundColor = '#e8f5e9';
+            binItem.style.opacity = '1';
         }
         
         // Bin info
@@ -174,70 +175,47 @@ function renderFIFOBins() {
             ${bin.batch ? `<div class="fifo-bin-batch" style="color: #666; font-size: 14px;">Batch: ${bin.batch}</div>` : ''}
         `;
         
-        // Quantity selector
-        const qtyControlDiv = document.createElement('div');
-        qtyControlDiv.style.cssText = 'display: flex; flex-direction: column; align-items: center; gap: 8px;';
+        // Quantity display
+        const qtyDisplayDiv = document.createElement('div');
+        qtyDisplayDiv.style.cssText = 'display: flex; flex-direction: column; align-items: center; gap: 5px;';
         
         // Selected / Available display
         const qtyStatusDiv = document.createElement('div');
-        qtyStatusDiv.style.cssText = 'font-weight: bold; font-size: 18px;';
-        qtyStatusDiv.innerHTML = `<span style="color: ${binSelected > 0 ? '#4CAF50' : '#999'};" id="bin-selected-${bin.id}">${binSelected}</span> / <span style="color: #666;">${binAvailable}</span>`;
+        qtyStatusDiv.style.cssText = 'font-weight: bold; font-size: 24px;';
+        qtyStatusDiv.innerHTML = `<span style="color: ${binSelected > 0 ? '#4CAF50' : '#999'};">${binSelected}</span> / <span style="color: #666;">${binAvailable}</span>`;
         
-        // Quantity input with +/- buttons
-        const inputGroupDiv = document.createElement('div');
-        inputGroupDiv.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+        const labelDiv = document.createElement('div');
+        labelDiv.style.cssText = 'font-size: 12px; color: #666;';
+        labelDiv.textContent = 'Selected / Available';
         
-        const minusBtn = document.createElement('button');
-        minusBtn.textContent = '−';
-        minusBtn.style.cssText = 'width: 35px; height: 35px; font-size: 20px; font-weight: bold; border: 2px solid #ddd; border-radius: 5px; background: white; cursor: pointer; transition: all 0.2s;';
-        minusBtn.disabled = binSelected === 0;
-        if (binSelected === 0) {
-            minusBtn.style.opacity = '0.3';
-            minusBtn.style.cursor = 'not-allowed';
-        }
-        minusBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            updateBinQuantity(bin, binSelected - 1);
-        });
-        
-        const qtyInput = document.createElement('input');
-        qtyInput.type = 'number';
-        qtyInput.min = '0';
-        qtyInput.max = maxAllowed.toString();
-        qtyInput.value = binSelected.toString();
-        qtyInput.id = `bin-qty-${bin.id}`;
-        qtyInput.style.cssText = 'width: 60px; height: 35px; text-align: center; font-size: 16px; font-weight: bold; border: 2px solid #ddd; border-radius: 5px;';
-        qtyInput.addEventListener('input', (e) => {
-            let val = parseInt(e.target.value) || 0;
-            if (val < 0) val = 0;
-            if (val > maxAllowed) val = maxAllowed;
-            e.target.value = val;
-            updateBinQuantity(bin, val);
-        });
-        qtyInput.addEventListener('click', (e) => e.stopPropagation());
-        
-        const plusBtn = document.createElement('button');
-        plusBtn.textContent = '+';
-        plusBtn.style.cssText = 'width: 35px; height: 35px; font-size: 20px; font-weight: bold; border: 2px solid #4CAF50; border-radius: 5px; background: white; color: #4CAF50; cursor: pointer; transition: all 0.2s;';
-        plusBtn.disabled = binSelected >= maxAllowed;
-        if (binSelected >= maxAllowed) {
-            plusBtn.style.opacity = '0.3';
-            plusBtn.style.cursor = 'not-allowed';
-        }
-        plusBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            updateBinQuantity(bin, binSelected + 1);
-        });
-        
-        inputGroupDiv.appendChild(minusBtn);
-        inputGroupDiv.appendChild(qtyInput);
-        inputGroupDiv.appendChild(plusBtn);
-        
-        qtyControlDiv.appendChild(qtyStatusDiv);
-        qtyControlDiv.appendChild(inputGroupDiv);
+        qtyDisplayDiv.appendChild(qtyStatusDiv);
+        qtyDisplayDiv.appendChild(labelDiv);
         
         binItem.appendChild(infoDiv);
-        binItem.appendChild(qtyControlDiv);
+        binItem.appendChild(qtyDisplayDiv);
+        
+        // Click to auto-select
+        if (isClickable) {
+            binItem.addEventListener('click', () => {
+                const autoSelectQty = Math.min(binAvailable, remainingCFC);
+                updateBinQuantity(bin, autoSelectQty);
+            });
+            
+            // Hover effect
+            binItem.addEventListener('mouseenter', () => {
+                if (remainingCFC > 0 && binSelected === 0) {
+                    binItem.style.borderColor = '#2196F3';
+                    binItem.style.backgroundColor = '#E3F2FD';
+                }
+            });
+            
+            binItem.addEventListener('mouseleave', () => {
+                if (binSelected === 0) {
+                    binItem.style.borderColor = '#ddd';
+                    binItem.style.backgroundColor = 'white';
+                }
+            });
+        }
         
         container.appendChild(binItem);
     });
