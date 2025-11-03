@@ -95,22 +95,19 @@ async function loadAvailableBins() {
         const response = await fetch(`/api/bins/available?sku=${incomingData.sku}`);
         const data = await response.json();
         
-        // Combine partial and full bins with same SKU
+        // Show partially filled and full bins together (all bins with cfc > 0)
         const sameSKUBins = [...(data.partialBins || []), ...(data.fullBins || [])];
         
         renderBins(sameSKUBins, 'partial-bins-grid');
+        
+        // Show empty bins with same SKU (cfc = 0) - like F37
+        // Only bins that had this SKU before but are now empty
         renderBins(data.emptyBins || [], 'empty-bins-grid');
     } catch (error) {
         console.error('Error loading bins:', error);
-        // Fallback to mock data if API fails
-        const partialBins = [];
-        const emptyBins = [
-            { id: 'BIN-011', sku: null, current: 0, capacity: 50, available: 50 },
-            { id: 'BIN-012', sku: null, current: 0, capacity: 50, available: 50 },
-            { id: 'BIN-013', sku: null, current: 0, capacity: 50, available: 50 },
-        ];
-        renderBins(partialBins, 'partial-bins-grid');
-        renderBins(emptyBins, 'empty-bins-grid');
+        // Fallback to empty if API fails
+        renderBins([], 'partial-bins-grid');
+        renderBins([], 'empty-bins-grid');
     }
 }
 

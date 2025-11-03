@@ -344,9 +344,13 @@ app.get('/api/bins/available', async (req, res) => {
   try {
     const { sku } = req.query;
     
-    // Get ALL bins with the requested SKU (same logic as FIFO for consistency)
+    // Get ALL bins with the requested SKU ONLY (no random empty bins)
+    // Same logic as /api/bins/fifo - only show bins that have/had this SKU
     const result = await db.query(
-      `SELECT bin_no, sku, cfc, qty, batch_no, created_at FROM inventory WHERE sku = $1 ORDER BY created_at ASC`,
+      `SELECT bin_no, sku, cfc, qty, batch_no, created_at 
+       FROM inventory 
+       WHERE sku = $1 
+       ORDER BY created_at ASC`,
       [sku]
     );
     
@@ -369,40 +373,21 @@ app.get('/api/bins/available', async (req, res) => {
       };
       
       if (currentQty === 0) {
-        // Empty bin with same SKU - ready to be filled
+        // Empty bin with same SKU - ready to be filled (e.g., F37 with cfc=0)
         emptyBins.push(binData);
       } else if (currentQty > 0 && currentQty < capacity) {
-        // Partially filled - can add more
+        // Partially filled - can add more (e.g., L28: 5/50, N34: 24/50)
         partialBins.push(binData);
       } else if (currentQty >= capacity) {
-        // Full bin - still show it for incoming (in case they want to overfill)
+        // Full bin - still show it (e.g., H34: 180/50, P19: 86/50)
         fullBins.push(binData);
       }
     });
     
-    // Get bins that are completely empty (not even in inventory table yet)
-    const allBinsResult = await db.query(
-      `SELECT DISTINCT bin_no FROM inventory ORDER BY bin_no`
-    );
+    // DO NOT add random empty bins like E01, E02 that never had this SKU
+    // Only show bins that are in inventory table with this specific SKU
     
-    const allBins = new Set(allBinsResult.rows.map(row => row.bin_no));
-    
-    // Add truly empty bins (not in inventory table at all)
-    allBins.forEach(binNo => {
-      // Check if this bin is already in our lists
-      const alreadyIncluded = [...partialBins, ...fullBins, ...emptyBins].some(b => b.id === binNo);
-      if (!alreadyIncluded) {
-        emptyBins.push({
-          id: binNo,
-          sku: null,
-          current: 0,
-          capacity: 50,
-          available: 50
-        });
-      }
-    });
-    
-    // Return all bins with same SKU (partial + full + empty with same SKU) plus truly empty bins
+    // Return ONLY bins with this SKU (partial + full + empty)
     res.json({ partialBins, fullBins, emptyBins });
   } catch (error) {
     console.error('Error fetching available bins:', error);
