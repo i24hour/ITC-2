@@ -111,48 +111,121 @@ async function loadAvailableBins() {
     }
 }
 
+// Track selected bins with quantities for incoming
+let selectedBinsWithQty = new Map(); // Map of binId -> { bin, quantity }
+let totalSelectedQty = 0;
+
 function renderBins(bins, containerId) {
     const container = document.getElementById(containerId);
     container.innerHTML = '';
     
-    bins.forEach(bin => {
+    bins.forEach((bin, index) => {
+        const binAvailable = bin.available || 50;
+        const binSelected = selectedBinsWithQty.get(bin.id)?.quantity || 0;
+        const remainingQty = incomingData.quantity - totalSelectedQty;
+        
+        // Allow clicking if: (1) bin not selected yet and space available, OR (2) bin already selected (to deselect)
+        const isClickable = (remainingQty > 0 && binSelected === 0) || binSelected > 0;
+        
         const binCard = document.createElement('div');
         binCard.className = 'bin-card';
         binCard.dataset.binId = bin.id;
-        binCard.dataset.available = bin.available;
+        binCard.style.cssText = `padding: 15px; border: 2px solid #ddd; border-radius: 8px; margin-bottom: 10px; transition: all 0.3s; cursor: pointer;`;
+        
+        if (binSelected > 0) {
+            binCard.style.borderColor = '#4CAF50';
+            binCard.style.backgroundColor = '#e8f5e9';
+        } else if (!isClickable) {
+            binCard.style.opacity = '0.6';
+            binCard.style.cursor = 'not-allowed';
+        }
         
         binCard.innerHTML = `
-            <div class="bin-name">${bin.id}</div>
-            <div class="bin-details">
+            <div class="bin-name" style="font-weight: bold; font-size: 18px;">${bin.id}</div>
+            <div class="bin-details" style="color: #666; font-size: 14px;">
                 Current: ${bin.current}/${bin.capacity}
             </div>
-            <div class="bin-capacity">Available: ${bin.available}</div>
+            <div class="bin-capacity" style="font-weight: bold; font-size: 20px; margin-top: 5px;">
+                <span style="color: ${binSelected > 0 ? '#4CAF50' : '#999'};">${binSelected}</span> / 
+                <span style="color: #666;">${binAvailable}</span>
+            </div>
+            <div style="font-size: 12px; color: #666;">Selected / Available</div>
         `;
         
-        binCard.addEventListener('click', () => toggleBinSelection(binCard, bin));
+        binCard.addEventListener('click', () => {
+            if (binSelected > 0) {
+                // Deselect
+                updateBinQuantityIncoming(bin, 0);
+            } else if (remainingQty > 0) {
+                // Auto-select max possible quantity
+                const autoSelectQty = Math.min(binAvailable, remainingQty);
+                updateBinQuantityIncoming(bin, autoSelectQty);
+            }
+        });
+        
+        // Hover effect
+        binCard.addEventListener('mouseenter', () => {
+            if (binSelected > 0) {
+                binCard.style.borderColor = '#f44336';
+                binCard.style.backgroundColor = '#ffebee';
+            } else if (remainingQty > 0) {
+                binCard.style.borderColor = '#2196F3';
+                binCard.style.backgroundColor = '#E3F2FD';
+            }
+        });
+        
+        binCard.addEventListener('mouseleave', () => {
+            if (binSelected > 0) {
+                binCard.style.borderColor = '#4CAF50';
+                binCard.style.backgroundColor = '#e8f5e9';
+            } else {
+                binCard.style.borderColor = '#ddd';
+                binCard.style.backgroundColor = 'white';
+            }
+        });
         
         container.appendChild(binCard);
     });
 }
 
-function toggleBinSelection(binCard, bin) {
-    const isSelected = binCard.classList.contains('selected');
+function updateBinQuantityIncoming(bin, newQuantity) {
+    const binAvailable = bin.available || 50;
+    const currentSelected = selectedBinsWithQty.get(bin.id)?.quantity || 0;
     
-    if (isSelected) {
-        binCard.classList.remove('selected');
-        selectedBins = selectedBins.filter(b => b.id !== bin.id);
-    } else {
-        binCard.classList.add('selected');
-        selectedBins.push(bin);
+    // Ensure quantity is within bounds
+    if (newQuantity < 0) newQuantity = 0;
+    if (newQuantity > binAvailable) newQuantity = binAvailable;
+    
+    // Calculate remaining capacity
+    const remainingQty = incomingData.quantity - (totalSelectedQty - currentSelected);
+    if (newQuantity > remainingQty) {
+        newQuantity = remainingQty;
     }
     
+    // Update total
+    totalSelectedQty = totalSelectedQty - currentSelected + newQuantity;
+    
+    // Update map
+    if (newQuantity > 0) {
+        selectedBinsWithQty.set(bin.id, { bin, quantity: newQuantity });
+    } else {
+        selectedBinsWithQty.delete(bin.id);
+    }
+    
+    // Update selectedBins array for compatibility
+    selectedBins = Array.from(selectedBinsWithQty.values()).map(item => item.bin);
+    
+    // Re-render to update display
+    loadAvailableBins();
+    
+    // Update counters
     updateBinCounters();
     updateProceedButton();
 }
 
 function updateBinCounters() {
     const totalRequired = incomingData.quantity;
-    const totalSelected = selectedBins.reduce((sum, bin) => sum + bin.available, 0);
+    const totalSelected = totalSelectedQty;
     const remaining = Math.max(0, totalRequired - totalSelected);
     
     document.getElementById('total-required').textContent = totalRequired;
@@ -162,9 +235,20 @@ function updateBinCounters() {
 
 function updateProceedButton() {
     const proceedBtn = document.getElementById('proceed-to-scan');
-    const totalSelected = selectedBins.reduce((sum, bin) => sum + bin.available, 0);
+    const requiredQty = parseInt(incomingData.quantity);
+    const selectedQty = totalSelectedQty;
     
-    proceedBtn.disabled = totalSelected < incomingData.quantity;
+    if (selectedQty === requiredQty && selectedQty > 0) {
+        proceedBtn.disabled = false;
+        proceedBtn.style.opacity = '1';
+        proceedBtn.style.cursor = 'pointer';
+        proceedBtn.style.backgroundColor = '#4CAF50';
+    } else {
+        proceedBtn.disabled = true;
+        proceedBtn.style.opacity = '0.5';
+        proceedBtn.style.cursor = 'not-allowed';
+        proceedBtn.style.backgroundColor = '#ccc';
+    }
 }
 
 function initStep2() {
@@ -201,10 +285,13 @@ async function goToStep3() {
 async function createTask() {
     try {
         const user = JSON.parse(localStorage.getItem('user'));
-        // Format: binId:quantity pairs (e.g., "F37:10,G13:5")
-        // For incoming, distribute quantity equally or use specified amounts per bin
-        const qtyPerBin = Math.ceil(incomingData.quantity / selectedBins.length);
-        const binDetails = selectedBins.map(b => `${b.id}:${qtyPerBin}`).join(',');
+        // Format: binId:quantity pairs (e.g., "G13:37,L28:45,F37:10")
+        // Use the actual selected quantities from the Map
+        const binDetails = Array.from(selectedBinsWithQty.entries())
+            .map(([binId, data]) => `${binId}:${data.quantity}`)
+            .join(',');
+        
+        console.log('Creating incoming task with bins:', binDetails);
         
         const response = await fetch('/api/tasks/create', {
             method: 'POST',
@@ -222,7 +309,9 @@ async function createTask() {
         const result = await response.json();
         if (result.success) {
             currentTaskId = result.task.id;
-            console.log('Incoming task created:', currentTaskId);
+            console.log('Incoming task created:', currentTaskId, 'Type:', result.task.type);
+        } else {
+            console.error('Failed to create task:', result);
         }
     } catch (error) {
         console.error('Error creating task:', error);
@@ -233,11 +322,12 @@ function populateScanLists() {
     const incompleteContainer = document.getElementById('incomplete-bins');
     incompleteContainer.innerHTML = '';
     
-    selectedBins.forEach(bin => {
+    // Use the selectedBinsWithQty Map to show correct quantities
+    selectedBinsWithQty.forEach((data, binId) => {
         const item = document.createElement('div');
         item.className = 'bin-scan-item pending';
-        item.dataset.binId = bin.id;
-        item.textContent = `${bin.id} (${bin.available} units)`;
+        item.dataset.binId = binId;
+        item.textContent = `${binId} (${data.quantity} units to add)`;
         incompleteContainer.appendChild(item);
     });
 }
