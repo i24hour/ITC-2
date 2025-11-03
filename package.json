@@ -12,7 +12,8 @@
     "dev": "nodemon server.js",
     "migrate": "node database/migrate.js",
     "test:db": "node test-db.js",
-    "setup:postgres": "chmod +x setup-postgres.sh && ./setup-postgres.sh"
+    "setup:postgres": "chmod +x setup-postgres.sh && ./setup-postgres.sh",
+    "generate:qr": "node generate-bin-qrcodes.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

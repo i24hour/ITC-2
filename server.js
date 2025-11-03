@@ -765,6 +765,62 @@ app.get('/api/tasks/check/:taskId', async (req, res) => {
   }
 });
 
+// ==================== BIN QR CODE GENERATION ====================
+
+// Generate QR code for a specific bin
+app.get('/api/bins/qr/:binNo', async (req, res) => {
+  try {
+    const { binNo } = req.params;
+    
+    // Check if bin exists
+    const result = await db.query(
+      'SELECT bin_no FROM inventory WHERE bin_no = $1 LIMIT 1',
+      [binNo]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Bin not found' });
+    }
+    
+    // Generate QR code as PNG buffer
+    const qrBuffer = await QRCode.toBuffer(binNo, {
+      type: 'png',
+      width: 300,
+      margin: 2
+    });
+    
+    res.set('Content-Type', 'image/png');
+    res.set('Content-Disposition', `attachment; filename="${binNo}.png"`);
+    res.send(qrBuffer);
+  } catch (error) {
+    console.error('Error generating QR code:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Download all bin QR codes as ZIP
+app.get('/api/bins/qr-all', async (req, res) => {
+  try {
+    const result = await db.query(
+      'SELECT DISTINCT bin_no FROM inventory ORDER BY bin_no'
+    );
+    
+    const bins = result.rows;
+    
+    // For now, return list of bins for frontend to download individually
+    // In future, can add ZIP functionality
+    res.json({
+      success: true,
+      bins: bins.map(row => row.bin_no),
+      count: bins.length,
+      downloadUrl: '/api/bins/qr/'
+    });
+  } catch (error) {
+    console.error('Error fetching bins:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start server
 app.listen(PORT, async () => {
   console.log(`\n🚀 Server running!`);
