@@ -239,33 +239,123 @@ function populateScanLists() {
 }
 
 async function initQRScanner() {
+    const statusElement = document.getElementById('scan-status');
+    
     try {
+        statusElement.textContent = '📷 Initializing camera...';
+        statusElement.style.color = '#666';
+        
+        // Check if mediaDevices is supported
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error('Camera API not supported in this browser');
+        }
+        
+        // Request camera permission explicitly first
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "environment" } 
+            });
+            // Stop the test stream immediately
+            stream.getTracks().forEach(track => track.stop());
+            console.log('✅ Camera permission granted');
+        } catch (permErr) {
+            console.error('Camera permission error:', permErr);
+            throw new Error('Camera permission denied. Please allow camera access in your browser settings.');
+        }
+        
+        // Initialize Html5Qrcode
         html5QrCode = new Html5Qrcode("qr-reader");
         
+        // Get available cameras
+        statusElement.textContent = '📷 Loading cameras...';
         const cameras = await Html5Qrcode.getCameras();
-        if (cameras && cameras.length) {
-            const cameraId = cameras[0].id;
-            
-            html5QrCode.start(
-                cameraId,
-                {
-                    fps: 10,
-                    qrbox: { width: 250, height: 250 }
-                },
-                onScanSuccess,
-                onScanError
-            );
+        
+        if (!cameras || cameras.length === 0) {
+            throw new Error('No cameras found on this device');
         }
+        
+        console.log(`Found ${cameras.length} camera(s):`, cameras);
+        
+        // Prefer back camera (environment) for scanning
+        let selectedCamera = cameras[0].id;
+        for (let camera of cameras) {
+            if (camera.label && camera.label.toLowerCase().includes('back')) {
+                selectedCamera = camera.id;
+                break;
+            }
+        }
+        
+        // Start the scanner
+        statusElement.textContent = '📷 Starting scanner...';
+        await html5QrCode.start(
+            selectedCamera,
+            {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
+            },
+            onScanSuccess,
+            onScanError
+        );
+        
+        statusElement.textContent = '✅ Ready to scan - Point camera at QR code';
+        statusElement.style.color = '#4CAF50';
+        
     } catch (err) {
         console.error('Error starting QR scanner:', err);
-        document.getElementById('scan-status').textContent = 'Error: Camera access denied';
+        statusElement.style.color = 'red';
+        
+        if (err.message.includes('permission')) {
+            statusElement.textContent = '❌ Camera permission denied. Please allow camera access and refresh the page.';
+        } else if (err.message.includes('not supported')) {
+            statusElement.textContent = '❌ Camera not supported in this browser. Please use Chrome or Safari.';
+        } else if (err.message.includes('No cameras found')) {
+            statusElement.textContent = '❌ No camera found on this device.';
+        } else {
+            statusElement.textContent = `❌ Error: ${err.message || 'Failed to start camera'}`;
+        }
     }
     
     // Toggle camera button
-    document.getElementById('toggle-camera').addEventListener('click', async () => {
-        // TODO: Implement camera switching
-        console.log('Switch camera');
-    });
+    const toggleBtn = document.getElementById('toggle-camera');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', async () => {
+            try {
+                const cameras = await Html5Qrcode.getCameras();
+                if (cameras && cameras.length > 1) {
+                    // Stop current camera
+                    if (html5QrCode) {
+                        await html5QrCode.stop();
+                    }
+                    
+                    // Start with next camera (simple toggle for now)
+                    const currentCameraIndex = cameras.findIndex(c => c.id === selectedCamera);
+                    const nextCameraIndex = (currentCameraIndex + 1) % cameras.length;
+                    selectedCamera = cameras[nextCameraIndex].id;
+                    
+                    await html5QrCode.start(
+                        selectedCamera,
+                        {
+                            fps: 10,
+                            qrbox: { width: 250, height: 250 },
+                            aspectRatio: 1.0
+                        },
+                        onScanSuccess,
+                        onScanError
+                    );
+                    
+                    statusElement.textContent = `✅ Switched to ${cameras[nextCameraIndex].label || 'camera ' + (nextCameraIndex + 1)}`;
+                    statusElement.style.color = '#4CAF50';
+                } else {
+                    statusElement.textContent = '⚠️ Only one camera available';
+                }
+            } catch (err) {
+                console.error('Error switching camera:', err);
+                statusElement.textContent = '❌ Failed to switch camera';
+                statusElement.style.color = 'red';
+            }
+        });
+    }
 }
 
 async function onScanSuccess(decodedText, decodedResult) {
