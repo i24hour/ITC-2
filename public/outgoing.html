@@ -85,6 +85,18 @@
 
             <div class="selected-bins-display">
                 <h3>Selected Bins (FIFO Order)</h3>
+                
+                <!-- Selection Status Display -->
+                <div id="selection-status" style="padding: 15px; margin-bottom: 20px; border-radius: 8px; background-color: #f5f5f5; text-align: center;">
+                    <h4 style="margin: 0 0 10px 0;">Selection Status</h4>
+                    <p style="margin: 0; font-size: 24px; font-weight: bold;">
+                        Total Selected: <span id="selected-cfc">0</span> / <span id="required-cfc">0</span> cartons
+                    </p>
+                    <p style="margin: 5px 0 0 0; font-size: 14px; color: #666;">
+                        Click bins to select/deselect quantities
+                    </p>
+                </div>
+                
                 <div id="fifo-bins-list" class="fifo-bins-list">
                     <!-- Bins auto-populated based on FIFO -->
                 </div>

@@ -79,6 +79,12 @@ async function goToStep2Outgoing() {
     document.getElementById('outgoing-sku').textContent = outgoingData.sku;
     document.getElementById('outgoing-qty').textContent = outgoingData.quantity;
     
+    // Set required CFC in status display
+    const requiredCfcElement = document.getElementById('required-cfc');
+    if (requiredCfcElement) {
+        requiredCfcElement.textContent = outgoingData.quantity;
+    }
+    
     // Fetch bins in FIFO order
     await loadFIFOBins();
     
@@ -238,20 +244,29 @@ function updateBinQuantity(bin, newQuantity) {
     renderFIFOBins();
     
     // Update selection status
-    document.getElementById('selected-cfc').textContent = totalSelectedCFC;
-    document.getElementById('selected-bins-count').textContent = selectedBins.size;
+    const selectedCfcElement = document.getElementById('selected-cfc');
+    if (selectedCfcElement) {
+        selectedCfcElement.textContent = totalSelectedCFC;
+    }
+    
+    const selectedBinsCountElement = document.getElementById('selected-bins-count');
+    if (selectedBinsCountElement) {
+        selectedBinsCountElement.textContent = selectedBins.size;
+    }
     
     // Update status color
     const statusDiv = document.getElementById('selection-status');
-    if (totalSelectedCFC >= outgoingData.quantity) {
-        statusDiv.style.backgroundColor = '#4CAF50';
-        statusDiv.style.color = 'white';
-    } else if (totalSelectedCFC > 0) {
-        statusDiv.style.backgroundColor = '#FFF3CD';
-        statusDiv.style.color = '#856404';
-    } else {
-        statusDiv.style.backgroundColor = '#f5f5f5';
-        statusDiv.style.color = '#333';
+    if (statusDiv) {
+        if (totalSelectedCFC >= outgoingData.quantity) {
+            statusDiv.style.backgroundColor = '#4CAF50';
+            statusDiv.style.color = 'white';
+        } else if (totalSelectedCFC > 0) {
+            statusDiv.style.backgroundColor = '#FFF3CD';
+            statusDiv.style.color = '#856404';
+        } else {
+            statusDiv.style.backgroundColor = '#f5f5f5';
+            statusDiv.style.color = '#333';
+        }
     }
     
     // Enable/disable proceed button
