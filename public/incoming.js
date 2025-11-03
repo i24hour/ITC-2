@@ -375,8 +375,25 @@ async function onScanSuccess(decodedText, decodedResult) {
         }
     }
     
+    // Normalize scanned text (remove hyphens, convert to uppercase)
+    const normalizedScanned = decodedText.replace(/-/g, '').toUpperCase().trim();
+    
+    // Find matching bin by normalizing stored bin IDs
+    let matchedBinId = null;
+    const allBinItems = document.querySelectorAll('.bin-scan-item');
+    
+    for (const item of allBinItems) {
+        const storedBinId = item.dataset.binId;
+        const normalizedStored = storedBinId.replace(/-/g, '').toUpperCase().trim();
+        
+        if (normalizedStored === normalizedScanned) {
+            matchedBinId = storedBinId;
+            break;
+        }
+    }
+    
     // Check if the scanned bin is in the selected list
-    const binItem = document.querySelector(`.bin-scan-item[data-bin-id="${decodedText}"]`);
+    const binItem = matchedBinId ? document.querySelector(`.bin-scan-item[data-bin-id="${matchedBinId}"]`) : null;
     
     if (binItem && binItem.classList.contains('pending')) {
         // Move to complete list
@@ -386,17 +403,20 @@ async function onScanSuccess(decodedText, decodedResult) {
         document.getElementById('complete-bins').appendChild(binItem);
         
         // Update status
-        document.getElementById('scan-status').textContent = `✅ ${decodedText} scanned successfully!`;
+        document.getElementById('scan-status').textContent = `✅ ${matchedBinId} scanned successfully!`;
+        document.getElementById('scan-status').style.color = '#4CAF50';
         
-        // Update bin in database
-        updateBinInDatabase(decodedText);
+        // Update bin in database (use the matched bin ID from database)
+        updateBinInDatabase(matchedBinId);
         
         // Check if all bins are scanned
         checkAllBinsScanned();
     } else if (binItem && binItem.classList.contains('scanned')) {
-        document.getElementById('scan-status').textContent = `⚠️ ${decodedText} already scanned`;
+        document.getElementById('scan-status').textContent = `⚠️ ${matchedBinId} already scanned`;
+        document.getElementById('scan-status').style.color = '#FF9800';
     } else {
         document.getElementById('scan-status').textContent = `❌ ${decodedText} not in selected bins`;
+        document.getElementById('scan-status').style.color = 'red';
     }
 }
 
