@@ -126,17 +126,21 @@ function renderFIFOBins() {
         const binAvailable = Math.round(bin.quantity);
         const binSelected = selectedBins.get(bin.id) || 0;
         const remainingCFC = outgoingData.quantity - totalSelectedCFC;
-        const isClickable = remainingCFC > 0 && binSelected === 0;
+        // Allow clicking if: (1) bin not selected yet and space available, OR (2) bin already selected (to deselect)
+        const isClickable = (remainingCFC > 0 && binSelected === 0) || binSelected > 0;
         
         const binItem = document.createElement('div');
         binItem.className = 'fifo-bin-item';
         binItem.dataset.binId = bin.id;
-        binItem.style.cssText = `display: flex; align-items: center; gap: 15px; padding: 15px; border: 2px solid #ddd; border-radius: 8px; margin-bottom: 10px; transition: all 0.3s; ${isClickable ? 'cursor: pointer;' : 'opacity: 0.6; cursor: not-allowed;'}`;
+        binItem.style.cssText = `display: flex; align-items: center; gap: 15px; padding: 15px; border: 2px solid #ddd; border-radius: 8px; margin-bottom: 10px; transition: all 0.3s; cursor: pointer;`;
         
         if (binSelected > 0) {
             binItem.style.borderColor = '#4CAF50';
             binItem.style.backgroundColor = '#e8f5e9';
             binItem.style.opacity = '1';
+        } else if (!isClickable) {
+            binItem.style.opacity = '0.6';
+            binItem.style.cursor = 'not-allowed';
         }
         
         // Bin info
@@ -167,28 +171,40 @@ function renderFIFOBins() {
         binItem.appendChild(infoDiv);
         binItem.appendChild(qtyDisplayDiv);
         
-        // Click to auto-select
-        if (isClickable) {
-            binItem.addEventListener('click', () => {
+        // Click to select/deselect
+        binItem.addEventListener('click', () => {
+            if (binSelected > 0) {
+                // Bin is already selected - clicking will deselect it
+                updateBinQuantity(bin, 0);
+            } else if (remainingCFC > 0) {
+                // Bin is not selected and space available - select it
                 const autoSelectQty = Math.min(binAvailable, remainingCFC);
                 updateBinQuantity(bin, autoSelectQty);
-            });
-            
-            // Hover effect
-            binItem.addEventListener('mouseenter', () => {
-                if (remainingCFC > 0 && binSelected === 0) {
-                    binItem.style.borderColor = '#2196F3';
-                    binItem.style.backgroundColor = '#E3F2FD';
-                }
-            });
-            
-            binItem.addEventListener('mouseleave', () => {
-                if (binSelected === 0) {
-                    binItem.style.borderColor = '#ddd';
-                    binItem.style.backgroundColor = 'white';
-                }
-            });
-        }
+            }
+        });
+        
+        // Hover effect
+        binItem.addEventListener('mouseenter', () => {
+            if (binSelected > 0) {
+                // Show it can be deselected
+                binItem.style.borderColor = '#f44336';
+                binItem.style.backgroundColor = '#ffebee';
+            } else if (remainingCFC > 0) {
+                // Show it can be selected
+                binItem.style.borderColor = '#2196F3';
+                binItem.style.backgroundColor = '#E3F2FD';
+            }
+        });
+        
+        binItem.addEventListener('mouseleave', () => {
+            if (binSelected > 0) {
+                binItem.style.borderColor = '#4CAF50';
+                binItem.style.backgroundColor = '#e8f5e9';
+            } else {
+                binItem.style.borderColor = '#ddd';
+                binItem.style.backgroundColor = 'white';
+            }
+        });
         
         container.appendChild(binItem);
     });
@@ -244,7 +260,16 @@ function updateBinQuantity(bin, newQuantity) {
 
 function updateProceedButton() {
     const proceedBtn = document.getElementById('proceed-to-dispatch');
-    if (totalSelectedCFC === outgoingData.quantity) {
+    const requiredQty = parseInt(outgoingData.quantity);
+    const selectedQty = totalSelectedCFC;
+    
+    console.log('Update Proceed Button:', {
+        required: requiredQty,
+        selected: selectedQty,
+        match: selectedQty === requiredQty
+    });
+    
+    if (selectedQty === requiredQty && selectedQty > 0) {
         proceedBtn.disabled = false;
         proceedBtn.style.opacity = '1';
         proceedBtn.style.cursor = 'pointer';
