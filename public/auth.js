@@ -30,24 +30,39 @@ document.addEventListener('DOMContentLoaded', () => {
         const password = document.getElementById('login-password').value;
         const role = document.getElementById('user-role').value;
 
-        // TODO: Replace with actual authentication API call
-        console.log('Login attempt:', { email, password, role });
+        try {
+            // Call server-side authentication API
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password, name: email.split('@')[0] })
+            });
 
-        // Generate unique session token
-        const sessionToken = generateSessionToken();
+            const result = await response.json();
 
-        // Simulate successful login
-        localStorage.setItem('user', JSON.stringify({ 
-            email, 
-            name: email.split('@')[0],
-            role: role,
-            loggedIn: true,
-            sessionToken: sessionToken,
-            loginTime: new Date().toISOString()
-        }));
-        
-        // Redirect to dashboard
-        window.location.href = 'dashboard.html';
+            if (result.success) {
+                // Store user data and server-issued session token
+                localStorage.setItem('user', JSON.stringify({ 
+                    email: result.user.email,
+                    name: result.user.name,
+                    role: role,
+                    loggedIn: true,
+                    sessionToken: result.sessionToken,
+                    expiresAt: result.expiresAt,
+                    loginTime: new Date().toISOString()
+                }));
+                
+                console.log('✅ Login successful with server session');
+                
+                // Redirect to dashboard
+                window.location.href = 'dashboard.html';
+            } else {
+                alert('Login failed: ' + (result.error || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Login error:', error);
+            alert('Network error during login. Please try again.');
+        }
     });
 
     // Handle signup
@@ -66,41 +81,93 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // TODO: Replace with actual registration API call
-        console.log('Signup attempt:', { name, email, password, role });
+        try {
+            // Call server-side authentication API
+            const response = await fetch('/api/auth/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, password })
+            });
 
-        // Generate unique session token
-        const sessionToken = generateSessionToken();
+            const result = await response.json();
 
-        // Simulate successful signup
-        localStorage.setItem('user', JSON.stringify({ 
-            email, 
-            name,
-            role: role,
-            loggedIn: true,
-            sessionToken: sessionToken,
-            loginTime: new Date().toISOString()
-        }));
-        
-        // Redirect to dashboard
-        window.location.href = 'dashboard.html';
+            if (result.success) {
+                // Store user data and server-issued session token
+                localStorage.setItem('user', JSON.stringify({ 
+                    email: result.user.email,
+                    name: result.user.name,
+                    role: role,
+                    loggedIn: true,
+                    sessionToken: result.sessionToken,
+                    expiresAt: result.expiresAt,
+                    loginTime: new Date().toISOString()
+                }));
+                
+                console.log('✅ Signup successful with server session');
+                
+                // Redirect to dashboard
+                window.location.href = 'dashboard.html';
+            } else {
+                alert('Signup failed: ' + (result.error || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Signup error:', error);
+            alert('Network error during signup. Please try again.');
+        }
     });
 });
 
-// Generate unique session token
-function generateSessionToken() {
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 15);
-    const userAgent = navigator.userAgent;
-    const combined = `${timestamp}-${random}-${userAgent}`;
+// Helper function for logout (can be called from other pages)
+async function logoutUser() {
+    const user = JSON.parse(localStorage.getItem('user'));
     
-    // Simple hash function
-    let hash = 0;
-    for (let i = 0; i < combined.length; i++) {
-        const char = combined.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash; // Convert to 32bit integer
+    if (user && user.sessionToken) {
+        try {
+            await fetch('/api/auth/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionToken: user.sessionToken })
+            });
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
     }
     
-    return `session_${Math.abs(hash)}_${timestamp}`;
+    localStorage.removeItem('user');
+    window.location.href = 'index.html';
+}
+
+// Validate session on page load (for protected pages)
+async function validateSession() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    
+    if (!user || !user.sessionToken) {
+        return false;
+    }
+    
+    try {
+        const response = await fetch('/api/auth/validate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionToken: user.sessionToken })
+        });
+        
+        const result = await response.json();
+        
+        if (result.valid) {
+            // Update local storage with fresh data
+            localStorage.setItem('user', JSON.stringify({
+                ...user,
+                expiresAt: result.expiresAt
+            }));
+            return true;
+        } else {
+            console.warn('Session validation failed:', result.reason);
+            localStorage.removeItem('user');
+            return false;
+        }
+    } catch (error) {
+        console.error('Session validation error:', error);
+        return false;
+    }
 }

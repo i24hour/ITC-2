@@ -4,6 +4,7 @@ const QRCode = require('qrcode');
 const cors = require('cors');
 const os = require('os');
 const db = require('./database/db');
+const sessions = require('./database/sessions');
 require('dotenv').config();
 
 const app = express();
@@ -48,6 +49,130 @@ app.get('/api/health', async (req, res) => {
       error: error.message,
       database: 'disconnected'
     });
+  }
+});
+
+// ==================== AUTHENTICATION API ENDPOINTS ====================
+
+// Login endpoint - creates server-side session
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password, name } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    
+    // In production, verify password against database
+    // For now, accept any login and create session
+    
+    const sessionResult = await sessions.createSession(email, name || email);
+    
+    if (!sessionResult.success) {
+      return res.status(500).json({ error: 'Failed to create session' });
+    }
+    
+    res.json({
+      success: true,
+      user: {
+        email: email,
+        name: name || email,
+        loggedIn: true
+      },
+      sessionToken: sessionResult.sessionToken,
+      expiresAt: sessionResult.expiresAt
+    });
+  } catch (error) {
+    console.error('Error during login:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Signup endpoint - creates server-side session
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    
+    if (!name || !email) {
+      return res.status(400).json({ error: 'Name and email are required' });
+    }
+    
+    // In production, hash password and store in database
+    // For now, just create session
+    
+    const sessionResult = await sessions.createSession(email, name);
+    
+    if (!sessionResult.success) {
+      return res.status(500).json({ error: 'Failed to create session' });
+    }
+    
+    res.json({
+      success: true,
+      user: {
+        email: email,
+        name: name,
+        loggedIn: true
+      },
+      sessionToken: sessionResult.sessionToken,
+      expiresAt: sessionResult.expiresAt
+    });
+  } catch (error) {
+    console.error('Error during signup:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Logout endpoint - invalidates session
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    const { sessionToken } = req.body;
+    
+    if (!sessionToken) {
+      return res.status(400).json({ error: 'Session token is required' });
+    }
+    
+    await sessions.invalidateSession(sessionToken);
+    
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    console.error('Error during logout:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Validate session endpoint
+app.post('/api/auth/validate', async (req, res) => {
+  try {
+    const { sessionToken } = req.body;
+    
+    if (!sessionToken) {
+      return res.status(400).json({ valid: false, reason: 'Session token is required' });
+    }
+    
+    const validation = await sessions.validateSession(sessionToken);
+    
+    if (validation.valid) {
+      res.json({
+        valid: true,
+        user: {
+          email: validation.session.user_identifier,
+          name: validation.session.user_name,
+          loggedIn: true
+        },
+        expiresAt: validation.session.expires_at
+      });
+    } else {
+      res.json({
+        valid: false,
+        reason: validation.reason
+      });
+    }
+  } catch (error) {
+    console.error('Error validating session:', error);
+    res.status(500).json({ valid: false, reason: error.message });
   }
 });
 
@@ -598,22 +723,37 @@ app.get('/api/supervisor/tasks', async (req, res) => {
       `SELECT * FROM tasks WHERE status = 'cancelled' ORDER BY cancelled_at DESC LIMIT 50`
     );
     
-    const formatTask = (row) => ({
-      id: row.id,
-      operator: row.operator,
-      sku: row.sku,
-      binNo: row.bin_no,
-      quantity: row.quantity,
-      type: row.task_type,
-      status: row.status,
-      timestamp: row.created_at,
-      startTime: row.created_at,
-      endTime: row.completed_at,
-      cancelReason: row.cancel_reason,
-      cancelledBy: row.cancelled_by,
-      cancelledAt: row.cancelled_at,
-      reason: row.cancel_reason
-    });
+    const formatTask = (row) => {
+      // Calculate progress for ongoing tasks
+      let progress = null;
+      if (row.status === 'ongoing' && row.bin_no && row.scanned_bins) {
+        const totalBins = row.bin_no.split(',').filter(Boolean).length;
+        const scannedCount = row.scanned_bins.split(',').filter(Boolean).length;
+        progress = {
+          scannedBins: scannedCount,
+          totalBins: totalBins,
+          percentage: totalBins > 0 ? Math.round((scannedCount / totalBins) * 100) : 0
+        };
+      }
+      
+      return {
+        id: row.id,
+        operator: row.operator,
+        sku: row.sku,
+        binNo: row.bin_no,
+        quantity: row.quantity,
+        type: row.task_type,
+        status: row.status,
+        timestamp: row.created_at,
+        startTime: row.created_at,
+        endTime: row.completed_at,
+        cancelReason: row.cancel_reason,
+        cancelledBy: row.cancelled_by,
+        cancelledAt: row.cancelled_at,
+        reason: row.cancel_reason,
+        progress: progress
+      };
+    };
     
     res.json({
       ongoing: ongoingResult.rows.map(formatTask),
@@ -876,8 +1016,14 @@ app.post('/api/bins/scan', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields', required: ['binId','taskId','sessionToken'] });
     }
 
+    // Validate session with session management system
+    const sessionValidation = await sessions.validateSession(sessionToken);
+    if (!sessionValidation.valid) {
+      return res.status(401).json({ error: 'Invalid or expired session', reason: sessionValidation.reason });
+    }
+
     // Fetch task
-    const taskResult = await db.query(`SELECT * FROM tasks WHERE id = $1`, [parseInt(taskId)]);
+    const taskResult = await client.query(`SELECT * FROM tasks WHERE id = $1`, [parseInt(taskId)]);
     if (taskResult.rows.length === 0) {
       return res.status(404).json({ error: 'Task not found' });
     }
@@ -886,7 +1032,7 @@ app.post('/api/bins/scan', async (req, res) => {
 
     // Validate session token matches the task's session_token
     if (!task.session_token || task.session_token !== sessionToken) {
-      return res.status(401).json({ error: 'Invalid or mismatched session token' });
+      return res.status(401).json({ error: 'Session token does not match task', detail: 'This task was created by a different user session' });
     }
 
     // Parse bin list saved on task: format binId:qty,bin2:qty
@@ -937,16 +1083,50 @@ app.post('/api/bins/scan', async (req, res) => {
       [newCFC, newQTY, binId, task.sku]
     );
 
-    // Log transaction
+    // Log transaction with operator from validated session
     await client.query(
       `INSERT INTO transactions (transaction_type, bin_id, sku, quantity, operator, previous_value, new_value)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      ['outgoing_scan', binId, task.sku, qtyToDeduct, task.operator || 'unknown', currentCFC, newCFC]
+      ['outgoing_scan', binId, task.sku, qtyToDeduct, sessionValidation.session.user_name || task.operator || 'unknown', currentCFC, newCFC]
     );
+
+    // Mark this bin as scanned in the task (add to scanned_bins column)
+    // Format: scanned_bins stores comma-separated list of scanned bin IDs
+    try {
+      await client.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS scanned_bins TEXT DEFAULT ''`);
+    } catch (err) {
+      console.warn('Could not add scanned_bins column:', err.message);
+    }
+
+    const scannedBins = (task.scanned_bins || '').split(',').filter(Boolean);
+    if (!scannedBins.includes(binId)) {
+      scannedBins.push(binId);
+      await client.query(
+        `UPDATE tasks SET scanned_bins = $1 WHERE id = $2`,
+        [scannedBins.join(','), parseInt(taskId)]
+      );
+    }
 
     await client.query('COMMIT');
 
-    return res.json({ success: true, binId, sku: task.sku, deducted: qtyToDeduct, remaining: newCFC });
+    // Calculate progress
+    const totalBins = binList.length;
+    const scannedCount = scannedBins.length;
+    const progress = Math.round((scannedCount / totalBins) * 100);
+
+    return res.json({ 
+      success: true, 
+      binId, 
+      sku: task.sku, 
+      deducted: qtyToDeduct, 
+      remaining: newCFC,
+      operator: sessionValidation.session.user_name,
+      progress: {
+        scannedBins: scannedCount,
+        totalBins: totalBins,
+        percentage: progress
+      }
+    });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error in /api/bins/scan:', error);
@@ -1020,7 +1200,20 @@ app.listen(PORT, async () => {
   // Test database connection
   try {
     await db.query('SELECT NOW()');
-    console.log('✅ PostgreSQL database connected successfully\n');
+    console.log('✅ PostgreSQL database connected successfully');
+    
+    // Initialize sessions table
+    await sessions.initSessionsTable();
+    
+    // Clean up expired sessions on startup
+    await sessions.cleanupExpiredSessions();
+    
+    // Schedule periodic cleanup (every hour)
+    setInterval(async () => {
+      await sessions.cleanupExpiredSessions();
+    }, 60 * 60 * 1000);
+    
+    console.log('✅ Session management initialized\n');
   } catch (error) {
     console.error('❌ Failed to connect to database:', error.message);
     console.error('   Please check your .env configuration\n');

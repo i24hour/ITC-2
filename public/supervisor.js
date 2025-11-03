@@ -224,12 +224,29 @@ function renderOngoingTasks() {
     
     allTasks.ongoing.forEach(task => {
         const row = document.createElement('tr');
+        
+        // Build progress display if available
+        let progressHTML = '';
+        if (task.progress && task.progress.totalBins > 0) {
+            const percentage = task.progress.percentage || 0;
+            const scanned = task.progress.scannedBins || 0;
+            const total = task.progress.totalBins || 0;
+            progressHTML = `
+                <div style="font-size: 11px; margin-top: 4px;">
+                    <div style="background: #e0e0e0; height: 6px; border-radius: 3px; overflow: hidden;">
+                        <div style="background: #4CAF50; height: 100%; width: ${percentage}%; transition: width 0.3s;"></div>
+                    </div>
+                    <span style="color: #666;">${scanned}/${total} bins scanned (${percentage}%)</span>
+                </div>
+            `;
+        }
+        
         row.innerHTML = `
             <td>${task.id}</td>
             <td>${task.operator}</td>
             <td><span class="badge ${task.type}">${task.type}</span></td>
             <td>${task.sku}</td>
-            <td>${task.quantity}</td>
+            <td>${task.quantity}${progressHTML}</td>
             <td>${formatDateTime(task.startTime)}</td>
             <td><span class="status-badge incomplete">${task.status}</span></td>
             <td>
