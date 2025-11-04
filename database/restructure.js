@@ -65,6 +65,7 @@ async function restructure() {
             CREATE TABLE "Bins" (
                 bin_no VARCHAR(50) PRIMARY KEY,
                 category CHAR(1) NOT NULL,
+                capacity INTEGER DEFAULT 240,
                 status VARCHAR(20) DEFAULT 'empty',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )

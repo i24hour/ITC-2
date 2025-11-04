@@ -425,7 +425,7 @@ app.get('/api/bins/available', async (req, res) => {
     const partialBins = [];
     const fullBins = [];
     const emptyBins = [];
-    const capacity = 50; // Default capacity per bin
+    const capacity = 240; // Maximum capacity per bin (240 CFC)
     
     // Process bins from Inventory (same SKU)
     inventoryResult.rows.forEach(row => {
@@ -1196,11 +1196,24 @@ app.post('/api/bins/scan', async (req, res) => {
 
     if (isOutgoing) {
       // OUTGOING: Deduct from bin
-      // Find inventory row for this bin and task.sku
-      const invRes = await client.query(
-        `SELECT * FROM "Inventory" WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
-        [binId, task.sku]
-      );
+      let invRes;
+      let useNewStructure = false;
+      
+      // Try new structure first
+      try {
+        invRes = await client.query(
+          `SELECT * FROM "Inventory" WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
+          [binId, task.sku]
+        );
+        useNewStructure = true;
+      } catch (err) {
+        // Fallback to old structure
+        invRes = await client.query(
+          `SELECT * FROM inventory WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
+          [binId, task.sku]
+        );
+        useNewStructure = false;
+      }
 
       if (invRes.rows.length === 0) {
         await client.query('ROLLBACK');
@@ -1219,11 +1232,18 @@ app.post('/api/bins/scan', async (req, res) => {
       const newCFC = Math.max(0, currentCFC - qtyToProcess);
       const newQTY = newCFC * uom;
 
-      // UPDATE "Inventory"
-      await client.query(
-        `UPDATE "Inventory" SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP WHERE bin_no = $3 AND sku = $4`,
-        [newCFC, newQTY, binId, task.sku]
-      );
+      // Update inventory
+      if (useNewStructure) {
+        await client.query(
+          `UPDATE "Inventory" SET cfc = $1, updated_at = CURRENT_TIMESTAMP WHERE bin_no = $2 AND sku = $3`,
+          [newCFC, binId, task.sku]
+        );
+      } else {
+        await client.query(
+          `UPDATE inventory SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP WHERE bin_no = $3 AND sku = $4`,
+          [newCFC, newQTY, binId, task.sku]
+        );
+      }
 
       // Log transaction
       await client.query(
@@ -1234,37 +1254,83 @@ app.post('/api/bins/scan', async (req, res) => {
 
     } else if (isIncoming) {
       // INCOMING: Add to bin
-      // Check if row exists
-      const invRes = await client.query(
-        `SELECT * FROM "Inventory" WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
-        [binId, task.sku]
-      );
-
       let currentCFC = 0;
       let newCFC = qtyToProcess;
-      const uom = 2.0; // Default UOM
-
-      if (invRes.rows.length > 0) {
-        // Update existing row
-        const currentRow = invRes.rows[0];
-        currentCFC = currentRow.cfc;
-        newCFC = currentCFC + qtyToProcess;
-        const existingUom = currentRow.uom || uom;
-
-        await client.query(
-          `UPDATE "Inventory" 
-           SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP
-           WHERE bin_no = $3 AND sku = $4`,
-          [newCFC, newCFC * existingUom, binId, task.sku]
+      let uom = 2.0; // Default UOM
+      let description = '';
+      let useNewStructure = false;
+      
+      // Try to get SKU details from Cleaned_FG_Master_file (new structure)
+      try {
+        const skuResult = await client.query(
+          `SELECT description, uom FROM "Cleaned_FG_Master_file" WHERE sku = $1`,
+          [task.sku]
         );
+        if (skuResult.rows.length > 0) {
+          description = skuResult.rows[0].description;
+          uom = skuResult.rows[0].uom;
+          useNewStructure = true;
+        }
+      } catch (err) {
+        console.log('Cleaned_FG_Master_file not found, using old structure');
+        useNewStructure = false;
+      }
+      
+      if (useNewStructure) {
+        // NEW STRUCTURE: Use "Inventory" table
+        const invRes = await client.query(
+          `SELECT * FROM "Inventory" WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
+          [binId, task.sku]
+        );
+
+        if (invRes.rows.length > 0) {
+          // Update existing row
+          currentCFC = invRes.rows[0].cfc;
+          newCFC = currentCFC + qtyToProcess;
+
+          await client.query(
+            `UPDATE "Inventory" 
+             SET cfc = $1, updated_at = CURRENT_TIMESTAMP
+             WHERE bin_no = $2 AND sku = $3`,
+            [newCFC, binId, task.sku]
+          );
+        } else {
+          // Insert new row
+          const batchNo = 'NEW' + new Date().toISOString().slice(2, 10).replace(/-/g, '');
+          await client.query(
+            `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [binId, task.sku, batchNo, newCFC, description, uom]
+          );
+        }
       } else {
-        // Insert new row
-        const batchNo = 'NEW' + new Date().toISOString().slice(2, 10).replace(/-/g, '');
-        await client.query(
-          `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, uom, qty)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [binId, task.sku, batchNo, newCFC, uom, newCFC * uom]
+        // OLD STRUCTURE: Use inventory table
+        const invRes = await client.query(
+          `SELECT * FROM inventory WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
+          [binId, task.sku]
         );
+
+        if (invRes.rows.length > 0) {
+          // Update existing row
+          currentCFC = invRes.rows[0].cfc;
+          newCFC = currentCFC + qtyToProcess;
+          const existingUom = invRes.rows[0].uom || uom;
+
+          await client.query(
+            `UPDATE inventory 
+             SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP
+             WHERE bin_no = $3 AND sku = $4`,
+            [newCFC, newCFC * existingUom, binId, task.sku]
+          );
+        } else {
+          // Insert new row
+          const batchNo = 'NEW' + new Date().toISOString().slice(2, 10).replace(/-/g, '');
+          await client.query(
+            `INSERT INTO inventory (bin_no, sku, batch_no, cfc, uom, qty)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [binId, task.sku, batchNo, newCFC, uom, newCFC * uom]
+          );
+        }
       }
 
       // Log transaction
@@ -1301,11 +1367,19 @@ app.post('/api/bins/scan', async (req, res) => {
     const scannedCount = scannedBins.length;
     const progress = Math.round((scannedCount / totalBins) * 100);
 
-    // Get updated inventory for response
-    const updatedInv = await client.query(
-      `SELECT cfc FROM "Inventory" WHERE bin_no = $1 AND sku = $2`,
-      [binId, task.sku]
-    );
+    // Get updated inventory for response (try new structure first)
+    let updatedInv;
+    try {
+      updatedInv = await client.query(
+        `SELECT cfc FROM "Inventory" WHERE bin_no = $1 AND sku = $2`,
+        [binId, task.sku]
+      );
+    } catch (err) {
+      updatedInv = await client.query(
+        `SELECT cfc FROM inventory WHERE bin_no = $1 AND sku = $2`,
+        [binId, task.sku]
+      );
+    }
     const finalCFC = updatedInv.rows.length > 0 ? updatedInv.rows[0].cfc : 0;
 
     return res.json({ 
