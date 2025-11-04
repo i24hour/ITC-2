@@ -54,6 +54,65 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+// Database status check endpoint (for debugging)
+app.get('/api/db-status', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const status = {
+      timestamp: new Date().toISOString(),
+      tables: {},
+      counts: {}
+    };
+    
+    // Check if tables exist
+    const tablesCheck = await client.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name IN ('Operators', 'Task_History', 'user_sessions')
+      ORDER BY table_name;
+    `);
+    
+    status.existingTables = tablesCheck.rows.map(r => r.table_name);
+    
+    // Check Operators table
+    if (status.existingTables.includes('Operators')) {
+      const operatorsCount = await client.query('SELECT COUNT(*) as count FROM "Operators"');
+      const recentOperators = await client.query('SELECT operator_id, name, email FROM "Operators" ORDER BY created_at DESC LIMIT 5');
+      status.counts.operators = operatorsCount.rows[0].count;
+      status.tables.operators = recentOperators.rows;
+    }
+    
+    // Check Task_History table
+    if (status.existingTables.includes('Task_History')) {
+      const tasksCount = await client.query('SELECT COUNT(*) as count FROM "Task_History"');
+      const recentTasks = await client.query(`
+        SELECT id, operator_id, operator_name, task_type, sku, quantity 
+        FROM "Task_History" 
+        ORDER BY completed_at DESC 
+        LIMIT 5
+      `);
+      status.counts.tasks = tasksCount.rows[0].count;
+      status.tables.taskHistory = recentTasks.rows;
+    }
+    
+    // Check user_sessions table
+    if (status.existingTables.includes('user_sessions')) {
+      const sessionsCount = await client.query('SELECT COUNT(*) as count FROM user_sessions');
+      const activeSessions = await client.query('SELECT COUNT(*) as count FROM user_sessions WHERE expires_at > NOW()');
+      status.counts.totalSessions = sessionsCount.rows[0].count;
+      status.counts.activeSessions = activeSessions.rows[0].count;
+    }
+    
+    res.json(status);
+  } catch (error) {
+    console.error('Error in db-status:', error);
+    res.status(500).json({ error: error.message, stack: error.stack });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== AUTHENTICATION API ENDPOINTS ====================
 
 // Login endpoint - creates server-side session
