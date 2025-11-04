@@ -69,7 +69,7 @@ app.get('/api/db-status', async (req, res) => {
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public' 
-      AND table_name IN ('Operators', 'Task_History', 'user_sessions')
+      AND table_name IN ('Operators', 'Task_History', 'user_sessions', 'Cleaned_FG_Master_file', 'Bin_Inventory')
       ORDER BY table_name;
     `);
     
@@ -110,6 +110,25 @@ app.get('/api/db-status', async (req, res) => {
     res.status(500).json({ error: error.message, stack: error.stack });
   } finally {
     client.release();
+  }
+});
+
+// Manual trigger for database restructure (ADMIN ONLY - for debugging)
+app.post('/api/admin/restructure', async (req, res) => {
+  try {
+    console.log('🔧 Manual database restructure triggered...');
+    await autoRestructure();
+    res.json({ 
+      success: true, 
+      message: 'Database restructure completed. Check /api/db-status to verify.' 
+    });
+  } catch (error) {
+    console.error('❌ Manual restructure failed:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message, 
+      stack: error.stack 
+    });
   }
 });
 
