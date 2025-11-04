@@ -1191,6 +1191,37 @@ app.post('/api/bins/scan', async (req, res) => {
 
     await client.query('BEGIN');
 
+    // Validate that the bin exists in the Bins table
+    let binExists = false;
+    try {
+      const binCheckNew = await client.query(
+        `SELECT bin_no FROM "Bins" WHERE bin_no = $1 LIMIT 1`,
+        [binId]
+      );
+      binExists = binCheckNew.rows.length > 0;
+    } catch (err) {
+      // Try old bins table
+      try {
+        const binCheckOld = await client.query(
+          `SELECT bin_no FROM bins WHERE bin_no = $1 LIMIT 1`,
+          [binId]
+        );
+        binExists = binCheckOld.rows.length > 0;
+      } catch (err2) {
+        // No bins table exists, allow any bin
+        binExists = true;
+      }
+    }
+
+    if (!binExists) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        error: 'Invalid bin',
+        message: `Bin ${binId} does not exist in the database. Please scan a valid bin QR code from the registered bins (A01-A08, B01-B07, C01-C07, D01-O08, P01-P11).`,
+        binId 
+      });
+    }
+
   const isIncoming = (task.task_type || task.type) === 'incoming' || taskType === 'incoming';
   const isOutgoing = (task.task_type || task.type) === 'outgoing' || taskType === 'outgoing';
 

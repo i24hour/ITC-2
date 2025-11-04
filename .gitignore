@@ -45,6 +45,7 @@ database/restructure-database.js
 # Documentation files (not needed in deployment)
 DATABASE_RESTRUCTURE_README.md
 DATABASE_5_TABLES_STRUCTURE.md
+VALID_BINS_REFERENCE.md
 
 # Deployment check scripts (not needed in deployment)
 check-deployment.bat
