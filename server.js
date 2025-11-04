@@ -340,19 +340,48 @@ app.get('/api/sku-list', async (req, res) => {
   }
 });
 
+// Get SKU details (description, UOM)
+app.get('/api/sku-details/:sku', async (req, res) => {
+  try {
+    const { sku } = req.params;
+    const result = await db.query(
+      `SELECT sku, description, uom FROM "Cleaned_FG_Master_file" WHERE sku = $1`,
+      [sku]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'SKU not found' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error fetching SKU details:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get available bins for incoming inventory
 app.get('/api/bins/available', async (req, res) => {
   try {
     const { sku } = req.query;
     
-    // Get ALL bins with the requested SKU ONLY (no random empty bins)
-    // Same logic as /api/bins/fifo - only show bins that have/had this SKU
-    const result = await db.query(
-      `SELECT bin_no, sku, cfc, qty, batch_no, created_at 
+    // Get bins with the requested SKU from Inventory
+    const inventoryResult = await db.query(
+      `SELECT bin_no, sku, cfc, batch_no, created_at 
        FROM "Inventory" 
        WHERE sku = $1 
        ORDER BY created_at ASC`,
       [sku]
+    );
+    
+    // Get all empty bins from Bins table (bins not in Inventory for any SKU)
+    const emptyBinsResult = await db.query(
+      `SELECT b.bin_no 
+       FROM "Bins" b
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "Inventory" i WHERE i.bin_no = b.bin_no
+       )
+       ORDER BY b.bin_no`
     );
     
     const partialBins = [];
@@ -360,7 +389,8 @@ app.get('/api/bins/available', async (req, res) => {
     const emptyBins = [];
     const capacity = 50; // Default capacity per bin
     
-    result.rows.forEach(row => {
+    // Process bins from Inventory (same SKU)
+    inventoryResult.rows.forEach(row => {
       const currentQty = row.cfc;
       const available = capacity - currentQty;
       
@@ -374,21 +404,26 @@ app.get('/api/bins/available', async (req, res) => {
       };
       
       if (currentQty === 0) {
-        // Empty bin with same SKU - ready to be filled (e.g., F37 with cfc=0)
         emptyBins.push(binData);
       } else if (currentQty > 0 && currentQty < capacity) {
-        // Partially filled - can add more (e.g., L28: 5/50, N34: 24/50)
         partialBins.push(binData);
       } else if (currentQty >= capacity) {
-        // Full bin - still show it (e.g., H34: 180/50, P19: 86/50)
         fullBins.push(binData);
       }
     });
     
-    // DO NOT add random empty bins like E01, E02 that never had this SKU
-    // Only show bins that are in inventory table with this specific SKU
+    // Add completely empty bins (not in Inventory at all)
+    emptyBinsResult.rows.forEach(row => {
+      emptyBins.push({
+        id: row.bin_no,
+        sku: null,
+        current: 0,
+        capacity: capacity,
+        available: capacity,
+        batch: null
+      });
+    });
     
-    // Return ONLY bins with this SKU (partial + full + empty)
     res.json({ partialBins, fullBins, emptyBins });
   } catch (error) {
     console.error('Error fetching available bins:', error);

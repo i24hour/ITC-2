@@ -32,6 +32,17 @@ function initStep1() {
     // Load SKU list for autocomplete
     loadSKUList(skuInput);
     
+    // Add event listener for SKU selection to fetch description
+    skuInput.addEventListener('change', async (e) => {
+        const sku = e.target.value.trim();
+        if (sku) {
+            await fetchAndDisplaySKUDetails(sku);
+        } else {
+            // Hide description if no SKU selected
+            document.getElementById('sku-description-container').style.display = 'none';
+        }
+    });
+    
     form.addEventListener('submit', (e) => {
         e.preventDefault();
         
@@ -48,6 +59,23 @@ function initStep1() {
         
         goToStep2();
     });
+}
+
+// Fetch and display SKU details (description and UOM)
+async function fetchAndDisplaySKUDetails(sku) {
+    try {
+        const response = await fetch(`/api/sku-details/${sku}`);
+        const data = await response.json();
+        
+        if (data.description) {
+            document.getElementById('sku-description').textContent = data.description;
+            document.getElementById('sku-uom').textContent = `UOM: ${data.uom} kg per CFC`;
+            document.getElementById('sku-description-container').style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Error fetching SKU details:', error);
+        document.getElementById('sku-description-container').style.display = 'none';
+    }
 }
 
 // Load available SKUs from server
