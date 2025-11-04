@@ -6,6 +6,7 @@ const os = require('os');
 const db = require('./database/db');
 const sessions = require('./database/sessions');
 const { autoRestructure } = require('./database/auto-restructure');
+const { migrateSessionsTable } = require('./database/migrate-sessions');
 require('dotenv').config();
 
 const app = express();
@@ -1701,6 +1702,13 @@ app.listen(PORT, async () => {
     
     // Auto-restructure database if needed
     await autoRestructure();
+    
+    // Migrate sessions table to fix operator_id column size
+    try {
+      await migrateSessionsTable();
+    } catch (migrationError) {
+      console.log('⚠️  Session migration skipped (table may not exist yet)');
+    }
     
     // Initialize sessions table
     await sessions.initSessionsTable();

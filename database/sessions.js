@@ -11,7 +11,7 @@ async function initSessionsTable() {
         session_token VARCHAR(255) UNIQUE NOT NULL,
         user_identifier VARCHAR(255) NOT NULL,
         user_name VARCHAR(255),
-        operator_id VARCHAR(10),
+        operator_id VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         expires_at TIMESTAMP NOT NULL,
         last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
