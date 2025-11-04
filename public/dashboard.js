@@ -53,9 +53,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Load task history
 async function loadTaskHistory() {
-    // Get session token from user object
+    // Get session token from user object OR separate localStorage (backwards compatibility)
     const user = JSON.parse(localStorage.getItem('user'));
-    const sessionToken = user?.sessionToken;
+    const sessionToken = user?.sessionToken || localStorage.getItem('sessionToken');
     const taskType = document.getElementById('task-type-filter')?.value || '';
     const historyList = document.getElementById('task-history-list');
     
@@ -65,10 +65,13 @@ async function loadTaskHistory() {
     }
     
     if (!sessionToken) {
-        historyList.innerHTML = '<p style="text-align: center; color: #f44336; padding: 20px;">⚠️ Please log in to view task history</p>';
+        historyList.innerHTML = '<p style="text-align: center; color: #f44336; padding: 20px;">⚠️ Please log out and log in again to view task history</p>';
         console.error('No session token found. User object:', user);
+        console.error('Please logout and login again to get a fresh session token');
         return;
     }
+    
+    console.log('✅ Session token found, loading task history...');
     
     try {
         historyList.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">Loading task history...</p>';

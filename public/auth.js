@@ -53,6 +53,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     loginTime: new Date().toISOString()
                 }));
                 
+                // Also store sessionToken separately for backwards compatibility
+                localStorage.setItem('sessionToken', result.sessionToken);
+                
                 console.log('✅ Login successful with server session, Operator ID:', result.user.operatorId);
                 
                 // Redirect to dashboard
@@ -104,6 +107,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     expiresAt: result.expiresAt,
                     loginTime: new Date().toISOString()
                 }));
+                
+                // Also store sessionToken separately for backwards compatibility
+                localStorage.setItem('sessionToken', result.sessionToken);
                 
                 console.log('✅ Signup successful with server session, Operator ID:', result.user.operatorId);
                 
