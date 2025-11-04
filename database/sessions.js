@@ -56,6 +56,9 @@ async function createSession(userIdentifier, userName, operatorId = null) {
   expiresAt.setHours(expiresAt.getHours() + 24); // 24-hour expiry
   
   try {
+    // Ensure table exists before inserting
+    await initSessionsTable();
+    
     const result = await db.query(
       `INSERT INTO user_sessions (session_token, user_identifier, user_name, operator_id, expires_at)
        VALUES ($1, $2, $3, $4, $5)
@@ -70,6 +73,7 @@ async function createSession(userIdentifier, userName, operatorId = null) {
     };
   } catch (error) {
     console.error('Error creating session:', error);
+    console.error('Session params:', { userIdentifier, userName, operatorId });
     return { success: false, error: error.message };
   }
 }
