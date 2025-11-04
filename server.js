@@ -2007,6 +2007,11 @@ app.get('/api/reports', async (req, res) => {
     
     if (type === 'inventory') {
       try {
+        // First check if table exists and has data
+        const countQuery = `SELECT COUNT(*) as total FROM "Inventory"`;
+        const countResult = await client.query(countQuery);
+        console.log('Inventory table total records:', countResult.rows[0].total);
+        
         const inventoryQuery = `
           SELECT bin_no, sku, 
                  COALESCE(batch_no, 'N/A') as batch_no, 
@@ -2022,9 +2027,11 @@ app.get('/api/reports', async (req, res) => {
           LIMIT 200
         `;
         const inventoryResult = await client.query(inventoryQuery);
+        console.log('Inventory records with cfc > 0:', inventoryResult.rows.length);
         data.inventory = inventoryResult.rows;
       } catch (err) {
-        console.error('Error fetching inventory data:', err.message);
+        console.error('Error fetching inventory data:', err);
+        console.error('Error details:', err.message, err.stack);
         data.inventory = [];
       }
     }
