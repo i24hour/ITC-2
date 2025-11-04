@@ -346,6 +346,137 @@ app.post('/api/admin/migrate-structure', async (req, res) => {
   }
 });
 
+// Admin endpoint: Export all database tables
+app.get('/api/admin/export-database', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    console.log('📦 Starting database export...');
+    
+    // Get all table names
+    const tablesResult = await client.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_type = 'BASE TABLE'
+      ORDER BY table_name
+    `);
+    
+    const tables = tablesResult.rows.map(r => r.table_name);
+    console.log(`Found ${tables.length} tables`);
+    
+    const exportData = {
+      exportDate: new Date().toISOString(),
+      totalTables: tables.length,
+      data: {},
+      summary: {}
+    };
+    
+    // Export each table
+    for (const tableName of tables) {
+      try {
+        // Get row count
+        const countResult = await client.query(`SELECT COUNT(*) as count FROM "${tableName}"`);
+        const rowCount = parseInt(countResult.rows[0].count);
+        
+        // Get all data
+        const dataResult = await client.query(`SELECT * FROM "${tableName}" ORDER BY 1`);
+        
+        exportData.data[tableName] = dataResult.rows;
+        exportData.summary[tableName] = {
+          rowCount: rowCount,
+          columns: dataResult.fields.map(f => f.name)
+        };
+        
+        console.log(`   ✅ Exported ${tableName}: ${rowCount} rows`);
+        
+      } catch (err) {
+        console.error(`   ❌ Error exporting ${tableName}:`, err.message);
+        exportData.summary[tableName] = { error: err.message };
+      }
+    }
+    
+    console.log('✅ Database export complete');
+    
+    // Set response headers for file download
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename=database_backup_${Date.now()}.json`);
+    res.json(exportData);
+    
+  } catch (error) {
+    console.error('❌ Export failed:', error);
+    res.status(500).json({ 
+      error: error.message,
+      stack: error.stack 
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// Admin endpoint: Export specific table as CSV
+app.get('/api/admin/export-table/:tableName', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { tableName } = req.params;
+    console.log(`📋 Exporting table: ${tableName}`);
+    
+    // Verify table exists
+    const tableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = $1
+      )
+    `, [tableName]);
+    
+    if (!tableCheck.rows[0].exists) {
+      return res.status(404).json({ error: `Table "${tableName}" not found` });
+    }
+    
+    // Get data
+    const dataResult = await client.query(`SELECT * FROM "${tableName}" ORDER BY 1`);
+    const data = dataResult.rows;
+    
+    if (data.length === 0) {
+      return res.json({ tableName, rowCount: 0, data: [] });
+    }
+    
+    // Convert to CSV
+    const headers = Object.keys(data[0]);
+    const csvRows = [headers.join(',')];
+    
+    for (const row of data) {
+      const values = headers.map(header => {
+        let cell = row[header];
+        if (cell === null || cell === undefined) return '';
+        if (cell instanceof Date) return cell.toISOString();
+        if (typeof cell === 'string' && (cell.includes(',') || cell.includes('"') || cell.includes('\n'))) {
+          return `"${cell.replace(/"/g, '""')}"`;
+        }
+        return cell;
+      });
+      csvRows.push(values.join(','));
+    }
+    
+    const csv = csvRows.join('\n');
+    
+    // Send as CSV download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=${tableName}_${Date.now()}.csv`);
+    res.send(csv);
+    
+    console.log(`✅ Exported ${tableName}: ${data.length} rows as CSV`);
+    
+  } catch (error) {
+    console.error('❌ Table export failed:', error);
+    res.status(500).json({ 
+      error: error.message,
+      stack: error.stack 
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== AUTHENTICATION API ENDPOINTS ====================
 
 // Login endpoint - creates server-side session
