@@ -19,6 +19,18 @@ async function initSessionsTable() {
       )
     `);
     
+    // Add operator_id column if it doesn't exist (for existing tables)
+    try {
+      await db.query(`
+        ALTER TABLE user_sessions 
+        ADD COLUMN IF NOT EXISTS operator_id VARCHAR(10)
+      `);
+      console.log('✅ operator_id column added/verified in user_sessions');
+    } catch (alterError) {
+      // Column might already exist, ignore error
+      console.log('Note: operator_id column may already exist');
+    }
+    
     // Create index for faster lookups
     await db.query(`
       CREATE INDEX IF NOT EXISTS idx_session_token ON user_sessions(session_token);
