@@ -70,12 +70,13 @@ app.post('/api/auth/login', async (req, res) => {
     
     // Try to fetch from Operators table
     try {
-      const operatorResult = await client.query(
+      let operatorResult = await client.query(
         `SELECT operator_id, name, email FROM "Operators" WHERE email = $1`,
         [email]
       );
       
       if (operatorResult.rows.length > 0) {
+        // Operator exists - use existing ID
         const operator = operatorResult.rows[0];
         operatorId = operator.operator_id;
         operatorName = operator.name;
@@ -86,7 +87,26 @@ app.post('/api/auth/login', async (req, res) => {
           [operatorId]
         );
       } else {
-        return res.status(401).json({ error: 'Operator not found. Please sign up first.' });
+        // Operator doesn't exist - auto-create for existing user
+        console.log(`🆕 Auto-creating operator for existing user: ${email}`);
+        
+        await client.query('BEGIN');
+        
+        // Get next operator ID
+        const countResult = await client.query(`SELECT COUNT(*) as count FROM "Operators"`);
+        const nextNumber = parseInt(countResult.rows[0].count) + 1;
+        operatorId = `OP${String(nextNumber).padStart(3, '0')}`;
+        
+        // Insert new operator
+        await client.query(
+          `INSERT INTO "Operators" (operator_id, name, email, role, created_at, last_login)
+           VALUES ($1, $2, $3, 'operator', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          [operatorId, operatorName, email]
+        );
+        
+        await client.query('COMMIT');
+        
+        console.log(`✅ Created operator ${operatorId} for ${email}`);
       }
     } catch (err) {
       console.log('Operators table not found, using session-only auth');
@@ -96,11 +116,7 @@ app.post('/api/auth/login', async (req, res) => {
     const sessionResult = await sessions.createSession(email, operatorName, operatorId);
     
     if (!sessionResult.success) {
-      console.error('Session creation failed:', sessionResult.error);
-      return res.status(500).json({ 
-        error: 'Failed to create session: ' + (sessionResult.error || 'Unknown error'),
-        details: sessionResult.error 
-      });
+      return res.status(500).json({ error: 'Failed to create session' });
     }
     
     res.json({
@@ -177,11 +193,7 @@ app.post('/api/auth/signup', async (req, res) => {
     const sessionResult = await sessions.createSession(email, name, operatorId);
     
     if (!sessionResult.success) {
-      console.error('Session creation failed during signup:', sessionResult.error);
-      return res.status(500).json({ 
-        error: 'Failed to create session: ' + (sessionResult.error || 'Unknown error'),
-        details: sessionResult.error 
-      });
+      return res.status(500).json({ error: 'Failed to create session' });
     }
     
     res.json({
@@ -263,7 +275,7 @@ app.post('/api/auth/validate', async (req, res) => {
 
 // Task History - Log task completion
 app.post('/api/tasks/complete', async (req, res) => {
-  const client = await db.getClient();
+  const client = await pool.connect();
   try {
     const { sessionToken, taskType, sku, quantity, binsUsed, startedAt } = req.body;
     
@@ -293,29 +305,19 @@ app.post('/api/tasks/complete', async (req, res) => {
     const durationMinutes = Math.round((completedAt - startTime) / 60000);
     
     // Insert into Task_History
-    try {
-      const result = await client.query(
-        `INSERT INTO "Task_History" 
-         (task_id, operator_id, operator_name, task_type, sku, quantity, bins_used, status, started_at, completed_at, duration_minutes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', $8, $9, $10)
-         RETURNING *`,
-        [taskId, operatorId, operatorName, taskType, sku, quantity, binsUsed, startTime, completedAt, durationMinutes]
-      );
-      
-      res.json({
-        success: true,
-        taskHistory: result.rows[0],
-        message: 'Task logged successfully'
-      });
-    } catch (insertError) {
-      console.error('Error inserting into Task_History:', insertError.message);
-      // If table doesn't exist, still return success but with a warning
-      res.json({
-        success: true,
-        warning: 'Task completed but history not logged - table not initialized',
-        message: 'Task completed successfully (history logging skipped)'
-      });
-    }
+    const result = await client.query(
+      `INSERT INTO "Task_History" 
+       (task_id, operator_id, operator_name, task_type, sku, quantity, bins_used, status, started_at, completed_at, duration_minutes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', $8, $9, $10)
+       RETURNING *`,
+      [taskId, operatorId, operatorName, taskType, sku, quantity, binsUsed, startTime, completedAt, durationMinutes]
+    );
+    
+    res.json({
+      success: true,
+      taskHistory: result.rows[0],
+      message: 'Task logged successfully'
+    });
   } catch (error) {
     console.error('Error logging task completion:', error);
     res.status(500).json({ error: error.message });
@@ -326,7 +328,7 @@ app.post('/api/tasks/complete', async (req, res) => {
 
 // Task History - Get all task history (for dashboard)
 app.get('/api/task-history', async (req, res) => {
-  const client = await db.getClient();
+  const client = await pool.connect();
   try {
     const { sessionToken, operatorId, taskType, startDate, endDate, limit = 100 } = req.query;
     
@@ -340,52 +342,39 @@ app.get('/api/task-history', async (req, res) => {
       return res.status(401).json({ error: 'Invalid or expired session' });
     }
     
-    // Check if Task_History table exists
-    let result;
-    try {
-      // Build query with filters
-      let query = `SELECT * FROM "Task_History" WHERE 1=1`;
-      const params = [];
-      let paramCount = 1;
-      
-      if (operatorId) {
-        query += ` AND operator_id = $${paramCount}`;
-        params.push(operatorId);
-        paramCount++;
-      }
-      
-      if (taskType) {
-        query += ` AND task_type = $${paramCount}`;
-        params.push(taskType);
-        paramCount++;
-      }
-      
-      if (startDate) {
-        query += ` AND completed_at >= $${paramCount}`;
-        params.push(startDate);
-        paramCount++;
-      }
-      
-      if (endDate) {
-        query += ` AND completed_at <= $${paramCount}`;
-        params.push(endDate);
-        paramCount++;
-      }
-      
-      query += ` ORDER BY completed_at DESC LIMIT $${paramCount}`;
-      params.push(limit);
-      
-      result = await client.query(query, params);
-    } catch (tableError) {
-      console.log('Task_History table not found or error:', tableError.message);
-      // Return empty array if table doesn't exist yet
-      return res.json({
-        success: true,
-        taskHistory: [],
-        count: 0,
-        message: 'Task history table not initialized yet'
-      });
+    // Build query with filters
+    let query = `SELECT * FROM "Task_History" WHERE 1=1`;
+    const params = [];
+    let paramCount = 1;
+    
+    if (operatorId) {
+      query += ` AND operator_id = $${paramCount}`;
+      params.push(operatorId);
+      paramCount++;
     }
+    
+    if (taskType) {
+      query += ` AND task_type = $${paramCount}`;
+      params.push(taskType);
+      paramCount++;
+    }
+    
+    if (startDate) {
+      query += ` AND completed_at >= $${paramCount}`;
+      params.push(startDate);
+      paramCount++;
+    }
+    
+    if (endDate) {
+      query += ` AND completed_at <= $${paramCount}`;
+      params.push(endDate);
+      paramCount++;
+    }
+    
+    query += ` ORDER BY completed_at DESC LIMIT $${paramCount}`;
+    params.push(limit);
+    
+    const result = await client.query(query, params);
     
     res.json({
       success: true,
