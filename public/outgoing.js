@@ -80,10 +80,6 @@ async function goToStep2Outgoing() {
     document.getElementById('step1-outgoing').classList.remove('active');
     document.getElementById('step2-outgoing').classList.add('active');
     
-    // Display SKU info
-    document.getElementById('outgoing-sku').textContent = outgoingData.sku;
-    document.getElementById('outgoing-qty').textContent = outgoingData.quantity;
-    
     // Set required CFC in status display
     const requiredCfcElement = document.getElementById('required-cfc');
     if (requiredCfcElement) {
@@ -252,11 +248,6 @@ function updateBinQuantity(bin, newQuantity) {
     const selectedCfcElement = document.getElementById('selected-cfc');
     if (selectedCfcElement) {
         selectedCfcElement.textContent = totalSelectedCFC;
-    }
-    
-    const selectedBinsCountElement = document.getElementById('selected-bins-count');
-    if (selectedBinsCountElement) {
-        selectedBinsCountElement.textContent = selectedBins.size;
     }
     
     // Update status color
