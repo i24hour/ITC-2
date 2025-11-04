@@ -2046,6 +2046,38 @@ app.get('/api/reports', async (req, res) => {
   }
 });
 
+// Debug endpoint to check inventory data
+app.get('/api/debug/inventory', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const allInventory = await client.query(`
+      SELECT bin_no, sku, batch_no, cfc, description, uom, weight, created_at, updated_at
+      FROM "Inventory"
+      ORDER BY bin_no
+      LIMIT 50
+    `);
+    
+    const nonEmptyInventory = await client.query(`
+      SELECT bin_no, sku, batch_no, cfc, description, uom, weight
+      FROM "Inventory"
+      WHERE cfc > 0
+      ORDER BY bin_no
+    `);
+    
+    res.json({
+      totalRecords: allInventory.rows.length,
+      nonEmptyRecords: nonEmptyInventory.rows.length,
+      allData: allInventory.rows,
+      nonEmptyData: nonEmptyInventory.rows
+    });
+  } catch (error) {
+    console.error('Error fetching inventory debug data:', error);
+    res.status(500).json({ error: error.message, stack: error.stack });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== SERVER START ====================
 
 // Start server
