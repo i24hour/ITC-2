@@ -46,58 +46,10 @@ database/restructure-database.js
 DATABASE_RESTRUCTURE_README.md
 DATABASE_5_TABLES_STRUCTURE.md
 VALID_BINS_REFERENCE.md
-DATABASE_STRUCTURE_AND_RELATIONSHIPS.md
-DEPLOYMENT_CHECKLIST.md
-DEPLOYMENT_FLOW.md
-DEPLOYMENT_SUMMARY.md
-EXCEL_DATABASE_MIGRATION.md
-AFTER_GITHUB_PUSH.md
-AZURE_DEPLOYMENT.md
-AZURE_READY.md
-FRONTEND_README.md
-GITHUB_DEPLOYMENT_GUIDE.md
-MIGRATION_SUMMARY.md
-OPERATOR_ID_FORMAT.md
-OPERATOR_TASK_HISTORY_COMPLETE.md
-POSTGRESQL_SETUP.md
-QUICKSTART.md
-QUICK_GUIDE_OPERATORS.md
-QUICK_REFERENCE.txt
-SECURE_SCAN_COMPLETE.md
-SETUP_COMPLETE.md
-SKU_INTEGRATION_COMPLETE.md
-SUPERVISOR_FEATURES_COMPLETE.md
 TASK_HISTORY_FLOW.md
-TASK_HISTORY_IMPLEMENTATION.md
-TESTING_REPORT.md
+OPERATOR_ID_FORMAT.md
 
 # Deployment check scripts (not needed in deployment)
 check-deployment.bat
-check-database-status.js
 check-operator-ids.js
-test-db.js
-
-# QR code generation scripts (run manually when needed)
-generate-bin-qrcodes.js
-generate-all-bin-qrcodes.js
-
-# Database migration/setup scripts (already run)
-database/complete-restructure.js
-database/import-sku-master.js
-database/restructure-database.js
-database/migrate-existing-users.js
-
-# Shell scripts (deployment handled by Azure)
-azure-deploy.sh
-deploy.sh
-setup-postgres.sh
-setup-postgres.bat
-
-# Alternative server files (not used in production)
-server-postgres.js
-
-# Excel files (reference only)
-*.xlsx
-
-# Export SQL queries (reference only)
-export_queries.sql
+check-database-status.js
