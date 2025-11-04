@@ -42,6 +42,37 @@ read-excel-inventory.js
 database/complete-restructure.js
 database/import-sku-master.js
 database/restructure-database.js
+
 # Documentation files (not needed in deployment)
 DATABASE_RESTRUCTURE_README.md
 DATABASE_5_TABLES_STRUCTURE.md
+SETUP_COMPLETE.md
+SECURE_SCAN_COMPLETE.md
+SKU_INTEGRATION_COMPLETE.md
+SUPERVISOR_FEATURES_COMPLETE.md
+MIGRATION_SUMMARY.md
+DEPLOYMENT_SUMMARY.md
+DEPLOYMENT_CHECKLIST.md
+DEPLOYMENT_FLOW.md
+AZURE_DEPLOYMENT.md
+AZURE_READY.md
+AFTER_GITHUB_PUSH.md
+GITHUB_DEPLOYMENT_GUIDE.md
+QUICKSTART.md
+QUICK_REFERENCE.txt
+TESTING_REPORT.md
+FRONTEND_README.md
+POSTGRESQL_SETUP.md
+EXCEL_DATABASE_MIGRATION.md
+
+# Deployment helper scripts (run manually, not needed in production)
+check-deployment.bat
+setup-postgres.bat
+setup-postgres.sh
+deploy.sh
+azure-deploy.sh
+generate-bin-qrcodes.js
+generate-all-bin-qrcodes.js
+
+# Git description file
+cribe your changes
