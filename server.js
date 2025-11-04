@@ -557,47 +557,84 @@ app.post('/api/bins/update', async (req, res) => {
     
     await client.query('BEGIN');
     
-    // Fetch SKU details from Cleaned_FG_Master_file
-    const skuResult = await client.query(
-      `SELECT description, uom FROM "Cleaned_FG_Master_file" WHERE sku = $1`,
-      [sku]
-    );
+    let description = '';
+    let uom = parseFloat(weight) || 2.0;
+    let useNewStructure = false;
     
-    if (skuResult.rows.length === 0) {
-      throw new Error(`SKU ${sku} not found in master file`);
+    // Try to fetch SKU details from Cleaned_FG_Master_file (new structure)
+    try {
+      const skuResult = await client.query(
+        `SELECT description, uom FROM "Cleaned_FG_Master_file" WHERE sku = $1`,
+        [sku]
+      );
+      
+      if (skuResult.rows.length > 0) {
+        description = skuResult.rows[0].description;
+        uom = skuResult.rows[0].uom;
+        useNewStructure = true;
+      }
+    } catch (err) {
+      console.log('Cleaned_FG_Master_file not found, using old structure');
+      useNewStructure = false;
     }
-    
-    const description = skuResult.rows[0].description;
-    const uom = skuResult.rows[0].uom;
-    
-    // Check if row exists in Inventory
-    const existingResult = await client.query(
-      `SELECT * FROM "Inventory" WHERE bin_no = $1 AND sku = $2`,
-      [binId, sku]
-    );
     
     let currentCFC = 0;
     let newCFC = parseInt(quantity);
     
-    if (existingResult.rows.length > 0) {
-      // Update existing row
-      currentCFC = existingResult.rows[0].cfc;
-      newCFC = currentCFC + parseInt(quantity);
+    if (useNewStructure) {
+      // NEW STRUCTURE: Use "Inventory" table
+      const existingResult = await client.query(
+        `SELECT * FROM "Inventory" WHERE bin_no = $1 AND sku = $2`,
+        [binId, sku]
+      );
       
-      await client.query(
-        `UPDATE "Inventory" 
-         SET cfc = $1, updated_at = CURRENT_TIMESTAMP
-         WHERE bin_no = $2 AND sku = $3`,
-        [newCFC, binId, sku]
-      );
+      if (existingResult.rows.length > 0) {
+        // Update existing row
+        currentCFC = existingResult.rows[0].cfc;
+        newCFC = currentCFC + parseInt(quantity);
+        
+        await client.query(
+          `UPDATE "Inventory" 
+           SET cfc = $1, updated_at = CURRENT_TIMESTAMP
+           WHERE bin_no = $2 AND sku = $3`,
+          [newCFC, binId, sku]
+        );
+      } else {
+        // Insert new row
+        const batchNo = 'NEW' + new Date().toISOString().slice(2, 10).replace(/-/g, '');
+        await client.query(
+          `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [binId, sku, batchNo, newCFC, description, uom]
+        );
+      }
     } else {
-      // Insert new row
-      const batchNo = 'NEW' + new Date().toISOString().slice(2, 10).replace(/-/g, '');
-      await client.query(
-        `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [binId, sku, batchNo, newCFC, description, uom]
+      // OLD STRUCTURE: Use inventory table
+      const existingResult = await client.query(
+        `SELECT * FROM inventory WHERE bin_no = $1 AND sku = $2`,
+        [binId, sku]
       );
+      
+      if (existingResult.rows.length > 0) {
+        // Update existing row
+        currentCFC = existingResult.rows[0].cfc;
+        newCFC = currentCFC + parseInt(quantity);
+        
+        await client.query(
+          `UPDATE inventory 
+           SET cfc = $1, qty = $2, uom = $3, updated_at = CURRENT_TIMESTAMP
+           WHERE bin_no = $4 AND sku = $5`,
+          [newCFC, newCFC * uom, uom, binId, sku]
+        );
+      } else {
+        // Insert new row
+        const batchNo = 'NEW' + new Date().toISOString().slice(2, 10).replace(/-/g, '');
+        await client.query(
+          `INSERT INTO inventory (bin_no, sku, batch_no, cfc, uom, qty)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [binId, sku, batchNo, newCFC, uom, newCFC * uom]
+        );
+      }
     }
     
     // Log transaction
