@@ -1535,6 +1535,13 @@ app.post('/api/bins/scan-deduct', async (req, res) => {
       [newCFC, newQTY, binId, sku]
     );
     
+    // Log to Outgoing table
+    await client.query(
+      `INSERT INTO "Outgoing" (sku, batch_no, description, quantity, weight, uom, bin_no, operator_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [sku, currentRow.batch_no, currentRow.description, parseInt(quantity), null, uom, binId, operator]
+    );
+    
     // Log transaction
     await client.query(
       `INSERT INTO transactions (transaction_type, bin_id, sku, quantity, operator, previous_value, new_value)
@@ -1742,12 +1749,20 @@ app.post('/api/bins/scan', async (req, res) => {
           // Update existing row
           currentCFC = invRes.rows[0].cfc;
           newCFC = currentCFC + qtyToProcess;
+          const batchNo = invRes.rows[0].batch_no;
 
           await client.query(
             `UPDATE "Inventory" 
              SET cfc = $1, updated_at = CURRENT_TIMESTAMP
              WHERE bin_no = $2 AND sku = $3`,
             [newCFC, binId, task.sku]
+          );
+          
+          // Log to Incoming table
+          await client.query(
+            `INSERT INTO "Incoming" (sku, batch_no, description, quantity, weight, uom, bin_no, operator_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [task.sku, batchNo, description, qtyToProcess, task.weight || null, uom, binId, sessionValidation.session.operator_id || null]
           );
         } else {
           // Insert new row with new batch format: Z05NOV25
@@ -1757,6 +1772,13 @@ app.post('/api/bins/scan', async (req, res) => {
             `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom)
              VALUES ($1, $2, $3, $4, $5, $6)`,
             [binId, task.sku, batchNo, newCFC, description, uom]
+          );
+          
+          // Log to Incoming table
+          await client.query(
+            `INSERT INTO "Incoming" (sku, batch_no, description, quantity, weight, uom, bin_no, operator_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [task.sku, batchNo, description, qtyToProcess, task.weight || null, uom, binId, sessionValidation.session.operator_id || null]
           );
         }
       } else {
