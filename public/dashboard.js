@@ -91,11 +91,15 @@ async function loadTaskHistory() {
                     ? '<span style="background: #4CAF50; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px;">📥 Incoming</span>'
                     : '<span style="background: #2196F3; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px;">📤 Outgoing</span>';
                 
+                // Ensure operator_id is displayed in OP00X format
+                const displayOperatorId = task.operator_id || 'N/A';
+                const displayOperatorName = task.operator_name || 'Unknown Operator';
+                
                 taskItem.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
                         <div>
                             <div style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">
-                                ${task.operator_id} - ${task.operator_name}
+                                <span style="color: #2196F3;">${displayOperatorId}</span> - ${displayOperatorName}
                             </div>
                             <div style="color: #666; font-size: 14px;">
                                 ${typeBadge} SKU: <strong>${task.sku}</strong> | Qty: <strong>${task.quantity}</strong> CFC
