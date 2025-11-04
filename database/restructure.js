@@ -159,7 +159,7 @@ async function restructure() {
         await db.query(`
             CREATE TABLE "Task_History" (
                 id SERIAL PRIMARY KEY,
-                task_id INTEGER,
+                task_id VARCHAR(100),
                 operator_id VARCHAR(10) NOT NULL,
                 operator_name VARCHAR(100),
                 task_type VARCHAR(20) NOT NULL,
@@ -170,8 +170,7 @@ async function restructure() {
                 started_at TIMESTAMP,
                 completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 duration_minutes INTEGER,
-                FOREIGN KEY (operator_id) REFERENCES "Operators"(operator_id),
-                FOREIGN KEY (sku) REFERENCES "Cleaned_FG_Master_file"(sku)
+                FOREIGN KEY (operator_id) REFERENCES "Operators"(operator_id) ON DELETE CASCADE
             )
         `);
         console.log('✅ Task_History table created');

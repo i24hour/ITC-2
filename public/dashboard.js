@@ -22,6 +22,12 @@ document.addEventListener('DOMContentLoaded', () => {
         userNameElement.textContent = user.name || user.email;
     }
 
+    // Set operator ID
+    const operatorIdElement = document.getElementById('operator-id');
+    if (operatorIdElement && user.operatorId) {
+        operatorIdElement.textContent = `(${user.operatorId})`;
+    }
+
     // Logout handler
     const logoutBtn = document.getElementById('logout-btn');
     logoutBtn.addEventListener('click', () => {
