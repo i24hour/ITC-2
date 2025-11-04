@@ -42,3 +42,4 @@ read-excel-inventory.js
 database/complete-restructure.js
 database/import-sku-master.js
 database/restructure-database.js
+DATABASE_RESTRUCTURE_README.md
