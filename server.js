@@ -98,7 +98,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (!sessionResult.success) {
       console.error('Session creation failed:', sessionResult.error);
       return res.status(500).json({ 
-        error: 'Failed to create session',
+        error: 'Failed to create session: ' + (sessionResult.error || 'Unknown error'),
         details: sessionResult.error 
       });
     }
@@ -177,9 +177,9 @@ app.post('/api/auth/signup', async (req, res) => {
     const sessionResult = await sessions.createSession(email, name, operatorId);
     
     if (!sessionResult.success) {
-      console.error('Session creation failed:', sessionResult.error);
+      console.error('Session creation failed during signup:', sessionResult.error);
       return res.status(500).json({ 
-        error: 'Failed to create session',
+        error: 'Failed to create session: ' + (sessionResult.error || 'Unknown error'),
         details: sessionResult.error 
       });
     }

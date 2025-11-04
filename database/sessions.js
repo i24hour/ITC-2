@@ -2,8 +2,12 @@
 const crypto = require('crypto');
 const db = require('./db');
 
+let isInitialized = false;
+
 // Initialize sessions table
 async function initSessionsTable() {
+  if (isInitialized) return;
+  
   try {
     await db.query(`
       CREATE TABLE IF NOT EXISTS user_sessions (
@@ -19,18 +23,6 @@ async function initSessionsTable() {
       )
     `);
     
-    // Add operator_id column if it doesn't exist (for existing tables)
-    try {
-      await db.query(`
-        ALTER TABLE user_sessions 
-        ADD COLUMN IF NOT EXISTS operator_id VARCHAR(10)
-      `);
-      console.log('✅ operator_id column added/verified in user_sessions');
-    } catch (alterError) {
-      // Column might already exist, ignore error
-      console.log('Note: operator_id column may already exist');
-    }
-    
     // Create index for faster lookups
     await db.query(`
       CREATE INDEX IF NOT EXISTS idx_session_token ON user_sessions(session_token);
@@ -38,9 +30,11 @@ async function initSessionsTable() {
       CREATE INDEX IF NOT EXISTS idx_expires_at ON user_sessions(expires_at);
     `);
     
+    isInitialized = true;
     console.log('✅ Sessions table initialized');
   } catch (error) {
     console.error('Error initializing sessions table:', error);
+    throw error;
   }
 }
 
@@ -51,14 +45,14 @@ function generateSecureToken() {
 
 // Create a new session
 async function createSession(userIdentifier, userName, operatorId = null) {
+  // Ensure table exists before trying to insert
+  await initSessionsTable();
+  
   const sessionToken = generateSecureToken();
   const expiresAt = new Date();
   expiresAt.setHours(expiresAt.getHours() + 24); // 24-hour expiry
   
   try {
-    // Ensure table exists before inserting
-    await initSessionsTable();
-    
     const result = await db.query(
       `INSERT INTO user_sessions (session_token, user_identifier, user_name, operator_id, expires_at)
        VALUES ($1, $2, $3, $4, $5)
@@ -73,7 +67,13 @@ async function createSession(userIdentifier, userName, operatorId = null) {
     };
   } catch (error) {
     console.error('Error creating session:', error);
-    console.error('Session params:', { userIdentifier, userName, operatorId });
+    console.error('Session creation details:', {
+      userIdentifier,
+      userName,
+      operatorId,
+      error: error.message,
+      stack: error.stack
+    });
     return { success: false, error: error.message };
   }
 }
