@@ -2007,33 +2007,14 @@ app.get('/api/reports', async (req, res) => {
     
     if (type === 'inventory') {
       try {
-        // Simplified query without COALESCE for better compatibility
         const inventoryQuery = `
-          SELECT bin_no, sku, batch_no, cfc as quantity, 
-                 description, uom, weight, created_at, updated_at
-          FROM "Inventory"
-          WHERE cfc > 0
-          ORDER BY bin_no, sku
-          LIMIT 200
+          SELECT * FROM "Inventory" WHERE cfc > 0 ORDER BY bin_no, sku LIMIT 200
         `;
         const inventoryResult = await client.query(inventoryQuery);
         console.log('Inventory query successful, rows:', inventoryResult.rows.length);
-        
-        // Handle NULL values in JavaScript instead
-        data.inventory = inventoryResult.rows.map(row => ({
-          bin_no: row.bin_no,
-          sku: row.sku,
-          batch_no: row.batch_no || 'N/A',
-          quantity: row.quantity || 0,
-          description: row.description || '',
-          uom: row.uom || 0,
-          weight: row.weight,
-          created_at: row.created_at,
-          updated_at: row.updated_at
-        }));
+        data.inventory = inventoryResult.rows;
       } catch (err) {
         console.error('Error fetching inventory data:', err);
-        console.error('Error details:', err.message, err.stack);
         data.inventory = [];
       }
     }

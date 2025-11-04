@@ -204,26 +204,29 @@ function generateInventoryTable(data) {
                     <th style="padding: 12px; border: 1px solid #ddd;">SKU</th>
                     <th style="padding: 12px; border: 1px solid #ddd;">Batch No</th>
                     <th style="padding: 12px; border: 1px solid #ddd;">Quantity (CFC)</th>
-                    <th style="padding: 12px; border: 1px solid #ddd;">UOM (kg/CFC)</th>
-                    <th style="padding: 12px; border: 1px solid #ddd;">Weight (kg)</th>
                     <th style="padding: 12px; border: 1px solid #ddd;">Description</th>
-                    <th style="padding: 12px; border: 1px solid #ddd;">Last Updated</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">UOM</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Weight</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Created</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Updated</th>
                 </tr>
             </thead>
             <tbody>
     `;
     
     data.forEach(row => {
-        const updated = new Date(row.updated_at).toLocaleString();
+        const created = row.created_at ? new Date(row.created_at).toLocaleString() : 'N/A';
+        const updated = row.updated_at ? new Date(row.updated_at).toLocaleString() : 'N/A';
         html += `
             <tr>
-                <td style="padding: 10px; border: 1px solid #ddd;"><strong>${row.bin_no}</strong></td>
-                <td style="padding: 10px; border: 1px solid #ddd;">${row.sku}</td>
-                <td style="padding: 10px; border: 1px solid #ddd;">${row.batch_no}</td>
-                <td style="padding: 10px; border: 1px solid #ddd;">${row.quantity}</td>
-                <td style="padding: 10px; border: 1px solid #ddd;">${row.uom || 'N/A'}</td>
-                <td style="padding: 10px; border: 1px solid #ddd;">${row.weight || 'N/A'}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;"><strong>${row.bin_no || ''}</strong></td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.sku || ''}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.batch_no || 'N/A'}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.cfc || row.quantity || 0}</td>
                 <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px;">${row.description || ''}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.uom || ''}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.weight || 'N/A'}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px;">${created}</td>
                 <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px;">${updated}</td>
             </tr>
         `;
