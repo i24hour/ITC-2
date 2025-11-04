@@ -186,7 +186,7 @@ app.post('/api/search-bins', async (req, res) => {
     
     const result = await db.query(
       `SELECT bin_no, sku, cfc, qty
-       FROM inventory
+       FROM "Inventory"
        WHERE sku = $1 AND cfc > $2
        ORDER BY bin_no`,
       [sku, minValue]
@@ -248,7 +248,7 @@ app.post('/api/process-scan', async (req, res) => {
     
     // Find the row with matching bin and SKU
     const inventoryResult = await client.query(
-      `SELECT * FROM inventory WHERE bin_no = $1 AND sku = $2`,
+      `SELECT * FROM "Inventory" WHERE bin_no = $1 AND sku = $2`,
       [binNo, sku]
     );
     
@@ -264,9 +264,9 @@ app.post('/api/process-scan', async (req, res) => {
     const newCFC = Math.max(0, currentCFC - parseInt(value));
     const newQTY = newCFC * uom;
     
-    // Update inventory
+    // UPDATE "Inventory"
     await client.query(
-      `UPDATE inventory 
+      `UPDATE "Inventory" 
        SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP
        WHERE bin_no = $3 AND sku = $4`,
       [newCFC, newQTY, binNo, sku]
@@ -302,7 +302,7 @@ app.post('/api/process-scan', async (req, res) => {
 app.get('/api/inventory', async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT bin_no, sku, cfc, qty FROM inventory ORDER BY bin_no, sku`
+      `SELECT bin_no, sku, cfc, qty FROM "Inventory" ORDER BY bin_no, sku`
     );
     
     // Convert to old format for compatibility
@@ -327,9 +327,9 @@ app.get('/api/inventory', async (req, res) => {
 // Get all available SKUs
 app.get('/api/sku-list', async (req, res) => {
   try {
-    // Fetch from sku_master table (new structure after restructure)
+    // Fetch from Cleaned_FG_Master_file table (new 5-table structure)
     const result = await db.query(
-      `SELECT sku FROM sku_master ORDER BY sku`
+      `SELECT sku FROM "Cleaned_FG_Master_file" ORDER BY sku`
     );
     
     const skus = result.rows.map(row => row.sku);
@@ -349,7 +349,7 @@ app.get('/api/bins/available', async (req, res) => {
     // Same logic as /api/bins/fifo - only show bins that have/had this SKU
     const result = await db.query(
       `SELECT bin_no, sku, cfc, qty, batch_no, created_at 
-       FROM inventory 
+       FROM "Inventory" 
        WHERE sku = $1 
        ORDER BY created_at ASC`,
       [sku]
@@ -408,14 +408,14 @@ app.get('/api/bins/fifo', async (req, res) => {
     if (batch) {
       // Filter by both SKU and batch number
       query = `SELECT bin_no, sku, cfc, batch_no, created_at
-               FROM inventory
+               FROM "Inventory"
                WHERE sku = $1 AND batch_no = $2
                ORDER BY created_at ASC`;
       params = [sku, batch];
     } else {
       // Filter by SKU only (backward compatibility)
       query = `SELECT bin_no, sku, cfc, batch_no, created_at
-               FROM inventory
+               FROM "Inventory"
                WHERE sku = $1
                ORDER BY created_at ASC`;
       params = [sku];
@@ -485,15 +485,27 @@ app.post('/api/bins/update', async (req, res) => {
     
     await client.query('BEGIN');
     
-    // Check if row exists
+    // Fetch SKU details from Cleaned_FG_Master_file
+    const skuResult = await client.query(
+      `SELECT description, uom FROM "Cleaned_FG_Master_file" WHERE sku = $1`,
+      [sku]
+    );
+    
+    if (skuResult.rows.length === 0) {
+      throw new Error(`SKU ${sku} not found in master file`);
+    }
+    
+    const description = skuResult.rows[0].description;
+    const uom = skuResult.rows[0].uom;
+    
+    // Check if row exists in Inventory
     const existingResult = await client.query(
-      `SELECT * FROM inventory WHERE bin_no = $1 AND sku = $2`,
+      `SELECT * FROM "Inventory" WHERE bin_no = $1 AND sku = $2`,
       [binId, sku]
     );
     
     let currentCFC = 0;
     let newCFC = parseInt(quantity);
-    const uom = parseFloat(weight) || 2.0;
     
     if (existingResult.rows.length > 0) {
       // Update existing row
@@ -501,18 +513,18 @@ app.post('/api/bins/update', async (req, res) => {
       newCFC = currentCFC + parseInt(quantity);
       
       await client.query(
-        `UPDATE inventory 
-         SET cfc = $1, qty = $2, uom = $3, updated_at = CURRENT_TIMESTAMP
-         WHERE bin_no = $4 AND sku = $5`,
-        [newCFC, newCFC * uom, uom, binId, sku]
+        `UPDATE "Inventory" 
+         SET cfc = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE bin_no = $2 AND sku = $3`,
+        [newCFC, binId, sku]
       );
     } else {
       // Insert new row
       const batchNo = 'NEW' + new Date().toISOString().slice(2, 10).replace(/-/g, '');
       await client.query(
-        `INSERT INTO inventory (bin_no, sku, batch_no, cfc, uom, qty)
+        `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [binId, sku, batchNo, newCFC, uom, newCFC * uom]
+        [binId, sku, batchNo, newCFC, description, uom]
       );
     }
     
@@ -552,7 +564,7 @@ app.post('/api/bins/dispatch', async (req, res) => {
     
     // Find the row
     const result = await client.query(
-      `SELECT * FROM inventory WHERE bin_no = $1 AND sku = $2`,
+      `SELECT * FROM "Inventory" WHERE bin_no = $1 AND sku = $2`,
       [binId, sku]
     );
     
@@ -568,9 +580,9 @@ app.post('/api/bins/dispatch', async (req, res) => {
     const newCFC = Math.max(0, currentCFC - parseInt(quantity));
     const newQTY = newCFC * uom;
     
-    // Update inventory
+    // UPDATE "Inventory"
     await client.query(
-      `UPDATE inventory 
+      `UPDATE "Inventory" 
        SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP
        WHERE bin_no = $3 AND sku = $4`,
       [newCFC, newQTY, binId, sku]
@@ -605,23 +617,23 @@ app.post('/api/bins/dispatch', async (req, res) => {
 app.get('/api/reports/summary', async (req, res) => {
   try {
     const totalCartonsResult = await db.query(
-      `SELECT COALESCE(SUM(cfc), 0) as total FROM inventory`
+      `SELECT COALESCE(SUM(cfc), 0) as total FROM "Inventory"`
     );
     
     const activeBinsResult = await db.query(
-      `SELECT COUNT(DISTINCT bin_no) as count FROM inventory WHERE cfc > 0`
+      `SELECT COUNT(DISTINCT bin_no) as count FROM "Inventory" WHERE cfc > 0`
     );
     
     const emptyBinsResult = await db.query(
-      `SELECT COUNT(DISTINCT bin_no) as count FROM inventory WHERE cfc = 0`
+      `SELECT COUNT(DISTINCT bin_no) as count FROM "Inventory" WHERE cfc = 0`
     );
     
     const skuTypesResult = await db.query(
-      `SELECT COUNT(DISTINCT sku) as count FROM inventory WHERE cfc > 0`
+      `SELECT COUNT(DISTINCT sku) as count FROM "Inventory" WHERE cfc > 0`
     );
     
     const totalBinsResult = await db.query(
-      `SELECT COUNT(DISTINCT bin_no) as count FROM inventory`
+      `SELECT COUNT(DISTINCT bin_no) as count FROM "Inventory"`
     );
     
     res.json({
@@ -951,7 +963,7 @@ app.post('/api/bins/scan-deduct', async (req, res) => {
     
     // Find the bin with SKU
     const result = await client.query(
-      `SELECT * FROM inventory WHERE bin_no = $1 AND sku = $2`,
+      `SELECT * FROM "Inventory" WHERE bin_no = $1 AND sku = $2`,
       [binId, sku]
     );
     
@@ -981,9 +993,9 @@ app.post('/api/bins/scan-deduct', async (req, res) => {
     const newCFC = Math.max(0, currentCFC - parseInt(quantity));
     const newQTY = newCFC * uom;
     
-    // Update inventory
+    // UPDATE "Inventory"
     await client.query(
-      `UPDATE inventory 
+      `UPDATE "Inventory" 
        SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP
        WHERE bin_no = $3 AND sku = $4`,
       [newCFC, newQTY, binId, sku]
@@ -1076,7 +1088,7 @@ app.post('/api/bins/scan', async (req, res) => {
       // OUTGOING: Deduct from bin
       // Find inventory row for this bin and task.sku
       const invRes = await client.query(
-        `SELECT * FROM inventory WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
+        `SELECT * FROM "Inventory" WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
         [binId, task.sku]
       );
 
@@ -1097,9 +1109,9 @@ app.post('/api/bins/scan', async (req, res) => {
       const newCFC = Math.max(0, currentCFC - qtyToProcess);
       const newQTY = newCFC * uom;
 
-      // Update inventory
+      // UPDATE "Inventory"
       await client.query(
-        `UPDATE inventory SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP WHERE bin_no = $3 AND sku = $4`,
+        `UPDATE "Inventory" SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP WHERE bin_no = $3 AND sku = $4`,
         [newCFC, newQTY, binId, task.sku]
       );
 
@@ -1114,7 +1126,7 @@ app.post('/api/bins/scan', async (req, res) => {
       // INCOMING: Add to bin
       // Check if row exists
       const invRes = await client.query(
-        `SELECT * FROM inventory WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
+        `SELECT * FROM "Inventory" WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
         [binId, task.sku]
       );
 
@@ -1130,7 +1142,7 @@ app.post('/api/bins/scan', async (req, res) => {
         const existingUom = currentRow.uom || uom;
 
         await client.query(
-          `UPDATE inventory 
+          `UPDATE "Inventory" 
            SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP
            WHERE bin_no = $3 AND sku = $4`,
           [newCFC, newCFC * existingUom, binId, task.sku]
@@ -1139,7 +1151,7 @@ app.post('/api/bins/scan', async (req, res) => {
         // Insert new row
         const batchNo = 'NEW' + new Date().toISOString().slice(2, 10).replace(/-/g, '');
         await client.query(
-          `INSERT INTO inventory (bin_no, sku, batch_no, cfc, uom, qty)
+          `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, uom, qty)
            VALUES ($1, $2, $3, $4, $5, $6)`,
           [binId, task.sku, batchNo, newCFC, uom, newCFC * uom]
         );
@@ -1181,7 +1193,7 @@ app.post('/api/bins/scan', async (req, res) => {
 
     // Get updated inventory for response
     const updatedInv = await client.query(
-      `SELECT cfc FROM inventory WHERE bin_no = $1 AND sku = $2`,
+      `SELECT cfc FROM "Inventory" WHERE bin_no = $1 AND sku = $2`,
       [binId, task.sku]
     );
     const finalCFC = updatedInv.rows.length > 0 ? updatedInv.rows[0].cfc : 0;
@@ -1216,7 +1228,7 @@ app.get('/api/bins/qr/:binNo', async (req, res) => {
     
     // Check if bin exists
     const result = await db.query(
-      'SELECT bin_no FROM inventory WHERE bin_no = $1 LIMIT 1',
+      'SELECT bin_no FROM "Inventory" WHERE bin_no = $1 LIMIT 1',
       [binNo]
     );
     
@@ -1244,7 +1256,7 @@ app.get('/api/bins/qr/:binNo', async (req, res) => {
 app.get('/api/bins/qr-all', async (req, res) => {
   try {
     const result = await db.query(
-      'SELECT DISTINCT bin_no FROM inventory ORDER BY bin_no'
+      'SELECT DISTINCT bin_no FROM "Inventory" ORDER BY bin_no'
     );
     
     const bins = result.rows;

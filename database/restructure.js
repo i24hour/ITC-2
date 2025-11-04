@@ -40,10 +40,11 @@ async function restructure() {
         
         console.log(`Found ${skuMap.size} SKUs`);
         
-        // Create tables
-        await db.query('DROP TABLE IF EXISTS sku_master CASCADE');
+        // ==================== TABLE 1: Cleaned_FG_Master_file ====================
+        console.log('\n📋 Creating Cleaned_FG_Master_file...');
+        await db.query('DROP TABLE IF EXISTS "Cleaned_FG_Master_file" CASCADE');
         await db.query(`
-            CREATE TABLE sku_master (
+            CREATE TABLE "Cleaned_FG_Master_file" (
                 sku VARCHAR(50) PRIMARY KEY,
                 description TEXT NOT NULL,
                 uom DECIMAL(10,3) NOT NULL,
@@ -52,55 +53,102 @@ async function restructure() {
         `);
         
         for (const [_, d] of skuMap) {
-            await db.query('INSERT INTO sku_master (sku, description, uom) VALUES ($1, $2, $3)', 
+            await db.query('INSERT INTO "Cleaned_FG_Master_file" (sku, description, uom) VALUES ($1, $2, $3)', 
                 [d.sku, d.description, d.uom]);
         }
+        console.log(`✅ Cleaned_FG_Master_file created with ${skuMap.size} SKUs`);
         
-        await db.query('DROP TABLE IF EXISTS bins CASCADE');
+        // ==================== TABLE 5: Bins ====================
+        console.log('\n🗃️ Creating Bins table...');
+        await db.query('DROP TABLE IF EXISTS "Bins" CASCADE');
         await db.query(`
-            CREATE TABLE bins (
+            CREATE TABLE "Bins" (
                 bin_no VARCHAR(50) PRIMARY KEY,
                 category CHAR(1) NOT NULL,
-                status VARCHAR(20) DEFAULT 'empty'
+                status VARCHAR(20) DEFAULT 'empty',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
         
         const bins = generateBins();
         for (const bin of bins) {
-            await db.query('INSERT INTO bins (bin_no, category) VALUES ($1, $2)', [bin, bin.charAt(0)]);
+            await db.query('INSERT INTO "Bins" (bin_no, category) VALUES ($1, $2)', [bin, bin.charAt(0)]);
         }
+        console.log(`✅ Bins table created with ${bins.length} bins`);
         
-        await db.query('DROP TABLE IF EXISTS inventory CASCADE');
+        // ==================== TABLE 2: Inventory ====================
+        console.log('\n📦 Creating Inventory table...');
+        await db.query('DROP TABLE IF EXISTS "Inventory" CASCADE');
         await db.query(`
-            CREATE TABLE inventory (
+            CREATE TABLE "Inventory" (
                 id SERIAL PRIMARY KEY,
                 bin_no VARCHAR(50) NOT NULL,
                 sku VARCHAR(50) NOT NULL,
-                batch_no VARCHAR(100),
+                batch_no VARCHAR(100) NOT NULL,
                 cfc INTEGER DEFAULT 0,
-                qty DECIMAL(10,2) DEFAULT 0,
+                description TEXT NOT NULL,
+                uom DECIMAL(10,3) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (sku) REFERENCES sku_master(sku),
-                FOREIGN KEY (bin_no) REFERENCES bins(bin_no),
-                UNIQUE(bin_no, sku, batch_no)
+                FOREIGN KEY (sku) REFERENCES "Cleaned_FG_Master_file"(sku),
+                FOREIGN KEY (bin_no) REFERENCES "Bins"(bin_no)
             )
         `);
+        console.log('✅ Inventory table created (empty - CFC = 0 for all)');
         
-        await db.query('DROP TABLE IF EXISTS active_skus CASCADE');
+        // ==================== TABLE 3: Incoming ====================
+        console.log('\n📥 Creating Incoming table...');
+        await db.query('DROP TABLE IF EXISTS "Incoming" CASCADE');
         await db.query(`
-            CREATE TABLE active_skus (
-                sku VARCHAR(50) PRIMARY KEY,
-                is_active BOOLEAN DEFAULT true,
-                FOREIGN KEY (sku) REFERENCES sku_master(sku)
+            CREATE TABLE "Incoming" (
+                id SERIAL PRIMARY KEY,
+                sku VARCHAR(50) NOT NULL,
+                batch_no VARCHAR(100) NOT NULL,
+                description TEXT NOT NULL,
+                weight DECIMAL(10,2) NOT NULL,
+                uom DECIMAL(10,3) NOT NULL,
+                cfc INTEGER NOT NULL,
+                bin_no VARCHAR(50),
+                incoming_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (sku) REFERENCES "Cleaned_FG_Master_file"(sku),
+                FOREIGN KEY (bin_no) REFERENCES "Bins"(bin_no)
             )
         `);
+        console.log('✅ Incoming table created');
         
-        for (const [sku] of skuMap) {
-            await db.query('INSERT INTO active_skus (sku, is_active) VALUES ($1, true)', [sku]);
-        }
+        // ==================== TABLE 4: Outgoing ====================
+        console.log('\n📤 Creating Outgoing table...');
+        await db.query('DROP TABLE IF EXISTS "Outgoing" CASCADE');
+        await db.query(`
+            CREATE TABLE "Outgoing" (
+                id SERIAL PRIMARY KEY,
+                sku VARCHAR(50) NOT NULL,
+                batch_no VARCHAR(100) NOT NULL,
+                description TEXT NOT NULL,
+                weight DECIMAL(10,2) NOT NULL,
+                uom DECIMAL(10,3) NOT NULL,
+                cfc INTEGER NOT NULL,
+                bin_no VARCHAR(50),
+                dod TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (sku) REFERENCES "Cleaned_FG_Master_file"(sku),
+                FOREIGN KEY (bin_no) REFERENCES "Bins"(bin_no)
+            )
+        `);
+        console.log('✅ Outgoing table created');
         
-        console.log(`✅ Restructure complete: ${bins.length} bins, ${skuMap.size} SKUs`);
+        // ==================== SUMMARY ====================
+        console.log('\n' + '='.repeat(60));
+        console.log('✅ DATABASE RESTRUCTURE COMPLETE!');
+        console.log('='.repeat(60));
+        console.log(`📋 Table 1: Cleaned_FG_Master_file - ${skuMap.size} SKUs`);
+        console.log(`📦 Table 2: Inventory - 0 records (all bins empty)`);
+        console.log(`📥 Table 3: Incoming - 0 records (ready for transactions)`);
+        console.log(`📤 Table 4: Outgoing - 0 records (ready for transactions)`);
+        console.log(`🗃️ Table 5: Bins - ${bins.length} bins (A-P categories)`);
+        console.log('='.repeat(60));
+        console.log('\n✅ All 5 tables created successfully!');
+        console.log('🚀 You can now use the Incoming tab to add inventory.\n');
+        
         await db.end();
         
     } catch (error) {
