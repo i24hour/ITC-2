@@ -132,6 +132,27 @@ app.post('/api/admin/restructure', async (req, res) => {
   }
 });
 
+// Create essential tables only (Operators, Task_History) without Excel dependency
+app.post('/api/admin/create-essential-tables', async (req, res) => {
+  try {
+    console.log('🔧 Creating essential tables (Operators, Task_History)...');
+    const { createEssentialTables } = require('./database/create-essential-tables');
+    const result = await createEssentialTables();
+    res.json({ 
+      success: true, 
+      message: 'Essential tables created successfully! Operators and Task_History tables are now ready.',
+      details: result
+    });
+  } catch (error) {
+    console.error('❌ Failed to create essential tables:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message, 
+      stack: error.stack 
+    });
+  }
+});
+
 // ==================== AUTHENTICATION API ENDPOINTS ====================
 
 // Login endpoint - creates server-side session
