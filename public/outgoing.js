@@ -36,10 +36,15 @@ function initStep1Outgoing() {
         
         const sku = document.getElementById('sku-search').value.trim();
         const quantity = parseInt(document.getElementById('dispatch-qty').value);
-        const batch = document.getElementById('batch-number').value;
+        const batch = document.getElementById('batch-number').value.trim();
 
         if (!sku) {
             alert('Please select a SKU');
+            return;
+        }
+
+        if (!batch) {
+            alert('Please enter a Batch Number');
             return;
         }
 
@@ -98,11 +103,11 @@ let totalSelectedCFC = 0;
 
 async function loadFIFOBins() {
     try {
-        const response = await fetch(`/api/bins/fifo?sku=${outgoingData.sku}`);
+        const response = await fetch(`/api/bins/fifo?sku=${outgoingData.sku}&batch=${encodeURIComponent(outgoingData.batch)}`);
         const data = await response.json();
         
         if (!data.bins || data.bins.length === 0) {
-            alert(`No bins found with SKU: ${outgoingData.sku}`);
+            alert(`No match found!\n\nNo bins found with:\n- SKU: ${outgoingData.sku}\n- Batch: ${outgoingData.batch}\n\nPlease verify the SKU and Batch Number.`);
             document.getElementById('step2-outgoing').classList.remove('active');
             document.getElementById('step1-outgoing').classList.add('active');
             return;

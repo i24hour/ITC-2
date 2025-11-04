@@ -31,3 +31,11 @@ backup*.sql
 # Temporary files
 tmp/
 temp/
+
+# Generated/Export files (created by scripts)
+exports/
+database_exports/
+export-inventory.js
+show-inventory.js
+fetch-inventory.js
+read-excel-inventory.js

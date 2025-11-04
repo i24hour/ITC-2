@@ -398,15 +398,29 @@ app.get('/api/bins/available', async (req, res) => {
 // Get bins in FIFO order for outgoing
 app.get('/api/bins/fifo', async (req, res) => {
   try {
-    const { sku } = req.query;
+    const { sku, batch } = req.query;
     
-    const result = await db.query(
-      `SELECT bin_no, sku, cfc, batch_no, created_at
-       FROM inventory
-       WHERE sku = $1
-       ORDER BY created_at ASC`,
-      [sku]
-    );
+    // Build query based on whether batch is provided
+    let query;
+    let params;
+    
+    if (batch) {
+      // Filter by both SKU and batch number
+      query = `SELECT bin_no, sku, cfc, batch_no, created_at
+               FROM inventory
+               WHERE sku = $1 AND batch_no = $2
+               ORDER BY created_at ASC`;
+      params = [sku, batch];
+    } else {
+      // Filter by SKU only (backward compatibility)
+      query = `SELECT bin_no, sku, cfc, batch_no, created_at
+               FROM inventory
+               WHERE sku = $1
+               ORDER BY created_at ASC`;
+      params = [sku];
+    }
+    
+    const result = await db.query(query, params);
     
     const bins = result.rows.map(row => {
       let daysOld = 0;
