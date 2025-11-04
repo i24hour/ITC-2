@@ -272,16 +272,3 @@ function exportToCSV() {
     a.click();
     window.URL.revokeObjectURL(url);
 }
-
-// TODO: Integrate charting library (e.g., Chart.js)
-/*
-function renderCharts() {
-    // Inventory Movement Trend Chart
-    const trendCtx = document.getElementById('trend-chart').getContext('2d');
-    new Chart(trendCtx, {
-        type: 'line',
-        data: {
-            labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-            datasets: [{
-                label: 'Incoming',
-                data: [120, 150, 
