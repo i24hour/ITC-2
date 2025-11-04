@@ -150,6 +150,24 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Task History -->
+            <div class="dashboard-section history-section">
+                <h2>📋 Task History</h2>
+                <div class="task-filters" style="margin-bottom: 15px; display: flex; gap: 10px;">
+                    <select id="task-type-filter" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <option value="">All Types</option>
+                        <option value="incoming">Incoming</option>
+                        <option value="outgoing">Outgoing</option>
+                    </select>
+                    <button id="refresh-history" class="btn btn-secondary" style="padding: 8px 15px;">
+                        🔄 Refresh
+                    </button>
+                </div>
+                <div id="task-history-list" class="task-history-list" style="max-height: 400px; overflow-y: auto;">
+                    <p style="text-align: center; color: #666; padding: 20px;">Loading task history...</p>
+                </div>
+            </div>
         </div>
     </div>
 

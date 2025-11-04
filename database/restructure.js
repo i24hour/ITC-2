@@ -137,6 +137,45 @@ async function restructure() {
         `);
         console.log('✅ Outgoing table created');
         
+        // ==================== TABLE 6: Operators ====================
+        console.log('\n👤 Creating Operators table...');
+        await db.query('DROP TABLE IF EXISTS "Operators" CASCADE');
+        await db.query(`
+            CREATE TABLE "Operators" (
+                operator_id VARCHAR(10) PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                email VARCHAR(100) UNIQUE NOT NULL,
+                password_hash VARCHAR(255),
+                role VARCHAR(20) DEFAULT 'operator',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_login TIMESTAMP
+            )
+        `);
+        console.log('✅ Operators table created');
+        
+        // ==================== TABLE 7: Task_History ====================
+        console.log('\n📋 Creating Task_History table...');
+        await db.query('DROP TABLE IF EXISTS "Task_History" CASCADE');
+        await db.query(`
+            CREATE TABLE "Task_History" (
+                id SERIAL PRIMARY KEY,
+                task_id INTEGER,
+                operator_id VARCHAR(10) NOT NULL,
+                operator_name VARCHAR(100),
+                task_type VARCHAR(20) NOT NULL,
+                sku VARCHAR(50),
+                quantity INTEGER,
+                bins_used TEXT,
+                status VARCHAR(20) DEFAULT 'completed',
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                duration_minutes INTEGER,
+                FOREIGN KEY (operator_id) REFERENCES "Operators"(operator_id),
+                FOREIGN KEY (sku) REFERENCES "Cleaned_FG_Master_file"(sku)
+            )
+        `);
+        console.log('✅ Task_History table created');
+        
         // ==================== SUMMARY ====================
         console.log('\n' + '='.repeat(60));
         console.log('✅ DATABASE RESTRUCTURE COMPLETE!');
@@ -146,9 +185,11 @@ async function restructure() {
         console.log(`📥 Table 3: Incoming - 0 records (ready for transactions)`);
         console.log(`📤 Table 4: Outgoing - 0 records (ready for transactions)`);
         console.log(`🗃️ Table 5: Bins - ${bins.length} bins (A-P categories)`);
+        console.log(`👤 Table 6: Operators - 0 records (ready for signups)`);
+        console.log(`📋 Table 7: Task_History - 0 records (ready for tracking)`);
         console.log('='.repeat(60));
-        console.log('\n✅ All 5 tables created successfully!');
-        console.log('🚀 You can now use the Incoming tab to add inventory.\n');
+        console.log('\n✅ All 7 tables created successfully!');
+        console.log('🚀 You can now use the system.\n');
         
         await db.end();
         

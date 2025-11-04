@@ -4,6 +4,7 @@ let outgoingData = {};
 let fifoBins = [];
 let html5QrCodeOut;
 let currentTaskId = null; // Store task ID for tracking
+let taskStartTime = null; // Store when task started
 
 document.addEventListener('DOMContentLoaded', () => {
     // Check authentication
@@ -105,6 +106,9 @@ async function loadSKUListOutgoing(inputElement) {
 
 // ===== STEP 2: FIFO Auto Selection =====
 async function goToStep2Outgoing() {
+    // Set task start time when entering step 2
+    taskStartTime = new Date().toISOString();
+    
     document.getElementById('step1-outgoing').classList.remove('active');
     document.getElementById('step2-outgoing').classList.add('active');
     
@@ -666,28 +670,37 @@ function checkAllBinsDispatched() {
 
 // Complete task in database
 async function completeOutgoingTask() {
-    if (!currentTaskId) return;
-    
     try {
+        const user = JSON.parse(localStorage.getItem('user'));
+        const sessionToken = localStorage.getItem('sessionToken');
+        
+        if (!sessionToken) {
+            console.error('No session token found');
+            return;
+        }
+        
+        // Prepare bins used list
+        const binsUsed = fifoBins.filter(bin => bin.scanned).map(bin => bin.id).join(', ');
+        
+        // Log task completion to Task_History
         const response = await fetch('/api/tasks/complete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ taskId: currentTaskId })
+            body: JSON.stringify({
+                sessionToken: sessionToken,
+                taskType: 'outgoing',
+                sku: outgoingData.sku,
+                quantity: outgoingData.quantity,
+                binsUsed: binsUsed,
+                startedAt: taskStartTime
+            })
         });
         
         const result = await response.json();
         if (result.success) {
-            console.log('Outgoing task completed:', currentTaskId);
-        } else if (result.cancelled) {
-            // Task was cancelled
-            document.getElementById('scan-status-out').textContent = '❌ Task cancelled by supervisor!';
-            document.getElementById('scan-status-out').style.color = 'red';
-            if (html5QrCodeOut) {
-                html5QrCodeOut.stop();
-            }
-            setTimeout(() => {
-                window.location.href = 'dashboard.html';
-            }, 2000);
+            console.log('Outgoing task logged successfully:', result.taskHistory);
+        } else {
+            console.error('Error logging outgoing task:', result.error);
         }
     } catch (error) {
         console.error('Error completing outgoing task:', error);

@@ -5,6 +5,7 @@ let incomingData = {};
 let selectedBins = [];
 let html5QrCode;
 let currentTaskId = null; // Store task ID for tracking
+let taskStartTime = null; // Store when task started
 
 document.addEventListener('DOMContentLoaded', () => {
     // Check authentication
@@ -101,6 +102,9 @@ async function loadSKUList(inputElement) {
 
 // ===== STEP 2: Select Bins =====
 async function goToStep2() {
+    // Set task start time when entering step 2
+    taskStartTime = new Date().toISOString();
+    
     document.getElementById('step1').classList.remove('active');
     document.getElementById('step2').classList.add('active');
     
@@ -606,30 +610,39 @@ function checkAllBinsScanned() {
     }
 }
 
-// Complete task in database
+// Complete task in database and log to task history
 async function completeTask() {
-    if (!currentTaskId) return;
-    
     try {
+        const user = JSON.parse(localStorage.getItem('user'));
+        const sessionToken = localStorage.getItem('sessionToken');
+        
+        if (!sessionToken) {
+            console.error('No session token found');
+            return;
+        }
+        
+        // Prepare bins used list
+        const binsUsed = selectedBins.map(bin => bin.id).join(', ');
+        
+        // Log task completion to Task_History
         const response = await fetch('/api/tasks/complete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ taskId: currentTaskId })
+            body: JSON.stringify({
+                sessionToken: sessionToken,
+                taskType: 'incoming',
+                sku: incomingData.sku,
+                quantity: incomingData.quantity,
+                binsUsed: binsUsed,
+                startedAt: taskStartTime
+            })
         });
         
         const result = await response.json();
         if (result.success) {
-            console.log('Task completed:', currentTaskId);
-        } else if (result.cancelled) {
-            // Task was cancelled
-            document.getElementById('scan-status').textContent = '❌ Task cancelled by supervisor!';
-            document.getElementById('scan-status').style.color = 'red';
-            if (html5QrCode) {
-                html5QrCode.stop();
-            }
-            setTimeout(() => {
-                window.location.href = 'dashboard.html';
-            }, 2000);
+            console.log('Task logged successfully:', result.taskHistory);
+        } else {
+            console.error('Error logging task:', result.error);
         }
     } catch (error) {
         console.error('Error completing task:', error);

@@ -57,6 +57,7 @@ app.get('/api/health', async (req, res) => {
 
 // Login endpoint - creates server-side session
 app.post('/api/auth/login', async (req, res) => {
+  const client = await db.getClient();
   try {
     const { email, password, name } = req.body;
     
@@ -64,10 +65,35 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email is required' });
     }
     
-    // In production, verify password against database
-    // For now, accept any login and create session
+    let operatorId = null;
+    let operatorName = name || email;
     
-    const sessionResult = await sessions.createSession(email, name || email);
+    // Try to fetch from Operators table
+    try {
+      const operatorResult = await client.query(
+        `SELECT operator_id, name, email FROM "Operators" WHERE email = $1`,
+        [email]
+      );
+      
+      if (operatorResult.rows.length > 0) {
+        const operator = operatorResult.rows[0];
+        operatorId = operator.operator_id;
+        operatorName = operator.name;
+        
+        // Update last login
+        await client.query(
+          `UPDATE "Operators" SET last_login = CURRENT_TIMESTAMP WHERE operator_id = $1`,
+          [operatorId]
+        );
+      } else {
+        return res.status(401).json({ error: 'Operator not found. Please sign up first.' });
+      }
+    } catch (err) {
+      console.log('Operators table not found, using session-only auth');
+      operatorId = email;
+    }
+    
+    const sessionResult = await sessions.createSession(email, operatorName, operatorId);
     
     if (!sessionResult.success) {
       return res.status(500).json({ error: 'Failed to create session' });
@@ -76,8 +102,9 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({
       success: true,
       user: {
+        operatorId: operatorId,
         email: email,
-        name: name || email,
+        name: operatorName,
         loggedIn: true
       },
       sessionToken: sessionResult.sessionToken,
@@ -86,11 +113,14 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (error) {
     console.error('Error during login:', error);
     res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
   }
 });
 
-// Signup endpoint - creates server-side session
+// Signup endpoint - creates server-side session with auto-generated operator ID
 app.post('/api/auth/signup', async (req, res) => {
+  const client = await db.getClient();
   try {
     const { name, email, password } = req.body;
     
@@ -98,10 +128,49 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ error: 'Name and email are required' });
     }
     
-    // In production, hash password and store in database
-    // For now, just create session
+    await client.query('BEGIN');
     
-    const sessionResult = await sessions.createSession(email, name);
+    // Check if Operators table exists (new structure)
+    let useNewStructure = false;
+    let operatorId = null;
+    
+    try {
+      // Check if email already exists
+      const existingCheck = await client.query(
+        `SELECT operator_id FROM "Operators" WHERE email = $1`,
+        [email]
+      );
+      
+      if (existingCheck.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Email already registered' });
+      }
+      
+      // Get the next operator ID by counting existing operators
+      const countResult = await client.query(
+        `SELECT COUNT(*) as count FROM "Operators"`
+      );
+      const nextNumber = parseInt(countResult.rows[0].count) + 1;
+      operatorId = `OP${String(nextNumber).padStart(3, '0')}`; // OP001, OP002, etc.
+      
+      // Insert new operator
+      await client.query(
+        `INSERT INTO "Operators" (operator_id, name, email, password_hash, role, created_at)
+         VALUES ($1, $2, $3, $4, 'operator', CURRENT_TIMESTAMP)`,
+        [operatorId, name, email, password] // In production, hash the password
+      );
+      
+      useNewStructure = true;
+    } catch (err) {
+      console.log('Operators table not found, using session-only auth');
+      useNewStructure = false;
+      operatorId = email; // Fallback to email as ID
+    }
+    
+    await client.query('COMMIT');
+    
+    // Create session
+    const sessionResult = await sessions.createSession(email, name, operatorId);
     
     if (!sessionResult.success) {
       return res.status(500).json({ error: 'Failed to create session' });
@@ -110,6 +179,7 @@ app.post('/api/auth/signup', async (req, res) => {
     res.json({
       success: true,
       user: {
+        operatorId: operatorId,
         email: email,
         name: name,
         loggedIn: true
@@ -118,8 +188,11 @@ app.post('/api/auth/signup', async (req, res) => {
       expiresAt: sessionResult.expiresAt
     });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error during signup:', error);
     res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -161,6 +234,7 @@ app.post('/api/auth/validate', async (req, res) => {
         user: {
           email: validation.session.user_identifier,
           name: validation.session.user_name,
+          operatorId: validation.session.operator_id,
           loggedIn: true
         },
         expiresAt: validation.session.expires_at
@@ -178,6 +252,122 @@ app.post('/api/auth/validate', async (req, res) => {
 });
 
 // ==================== INVENTORY API ENDPOINTS ====================
+
+// Task History - Log task completion
+app.post('/api/tasks/complete', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { sessionToken, taskType, sku, quantity, binsUsed, startedAt } = req.body;
+    
+    if (!sessionToken) {
+      return res.status(401).json({ error: 'Session token is required' });
+    }
+    
+    // Validate session and get operator info
+    const validation = await sessions.validateSession(sessionToken);
+    if (!validation.valid) {
+      return res.status(401).json({ error: 'Invalid or expired session' });
+    }
+    
+    const operatorId = validation.session.operator_id;
+    const operatorName = validation.session.user_name;
+    
+    if (!operatorId) {
+      return res.status(400).json({ error: 'Operator ID not found in session' });
+    }
+    
+    // Generate task ID
+    const taskId = `TASK-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Calculate duration
+    const startTime = new Date(startedAt);
+    const completedAt = new Date();
+    const durationMinutes = Math.round((completedAt - startTime) / 60000);
+    
+    // Insert into Task_History
+    const result = await client.query(
+      `INSERT INTO "Task_History" 
+       (task_id, operator_id, operator_name, task_type, sku, quantity, bins_used, status, started_at, completed_at, duration_minutes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'completed', $8, $9, $10)
+       RETURNING *`,
+      [taskId, operatorId, operatorName, taskType, sku, quantity, binsUsed, startTime, completedAt, durationMinutes]
+    );
+    
+    res.json({
+      success: true,
+      taskHistory: result.rows[0],
+      message: 'Task logged successfully'
+    });
+  } catch (error) {
+    console.error('Error logging task completion:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Task History - Get all task history (for dashboard)
+app.get('/api/task-history', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { sessionToken, operatorId, taskType, startDate, endDate, limit = 100 } = req.query;
+    
+    if (!sessionToken) {
+      return res.status(401).json({ error: 'Session token is required' });
+    }
+    
+    // Validate session
+    const validation = await sessions.validateSession(sessionToken);
+    if (!validation.valid) {
+      return res.status(401).json({ error: 'Invalid or expired session' });
+    }
+    
+    // Build query with filters
+    let query = `SELECT * FROM "Task_History" WHERE 1=1`;
+    const params = [];
+    let paramCount = 1;
+    
+    if (operatorId) {
+      query += ` AND operator_id = $${paramCount}`;
+      params.push(operatorId);
+      paramCount++;
+    }
+    
+    if (taskType) {
+      query += ` AND task_type = $${paramCount}`;
+      params.push(taskType);
+      paramCount++;
+    }
+    
+    if (startDate) {
+      query += ` AND completed_at >= $${paramCount}`;
+      params.push(startDate);
+      paramCount++;
+    }
+    
+    if (endDate) {
+      query += ` AND completed_at <= $${paramCount}`;
+      params.push(endDate);
+      paramCount++;
+    }
+    
+    query += ` ORDER BY completed_at DESC LIMIT $${paramCount}`;
+    params.push(limit);
+    
+    const result = await client.query(query, params);
+    
+    res.json({
+      success: true,
+      taskHistory: result.rows,
+      count: result.rows.length
+    });
+  } catch (error) {
+    console.error('Error fetching task history:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
 
 // Get bins with quantity greater than specified value for a SKU
 app.post('/api/search-bins', async (req, res) => {

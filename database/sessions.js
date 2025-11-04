@@ -11,6 +11,7 @@ async function initSessionsTable() {
         session_token VARCHAR(255) UNIQUE NOT NULL,
         user_identifier VARCHAR(255) NOT NULL,
         user_name VARCHAR(255),
+        operator_id VARCHAR(10),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         expires_at TIMESTAMP NOT NULL,
         last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -37,17 +38,17 @@ function generateSecureToken() {
 }
 
 // Create a new session
-async function createSession(userIdentifier, userName) {
+async function createSession(userIdentifier, userName, operatorId = null) {
   const sessionToken = generateSecureToken();
   const expiresAt = new Date();
   expiresAt.setHours(expiresAt.getHours() + 24); // 24-hour expiry
   
   try {
     const result = await db.query(
-      `INSERT INTO user_sessions (session_token, user_identifier, user_name, expires_at)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO user_sessions (session_token, user_identifier, user_name, operator_id, expires_at)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [sessionToken, userIdentifier, userName, expiresAt]
+      [sessionToken, userIdentifier, userName, operatorId, expiresAt]
     );
     
     return {
