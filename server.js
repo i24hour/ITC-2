@@ -69,11 +69,45 @@ app.get('/api/db-status', async (req, res) => {
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public' 
-      AND table_name IN ('Operators', 'Task_History', 'user_sessions', 'Cleaned_FG_Master_file', 'Bin_Inventory')
+      AND table_name IN (
+        'Operators', 'Task_History', 'user_sessions', 
+        'Cleaned_FG_Master_file', 'Bin_Inventory', 'Bins',
+        'Incoming', 'Outgoing', 'Historical_Log'
+      )
       ORDER BY table_name;
     `);
     
     status.existingTables = tablesCheck.rows.map(r => r.table_name);
+    
+    // Check Bins table
+    if (status.existingTables.includes('Bins')) {
+      const binsCount = await client.query('SELECT COUNT(*) as count FROM "Bins"');
+      const emptyBins = await client.query('SELECT COUNT(*) as count FROM "Bins" WHERE status = \'empty\'');
+      status.counts.totalBins = binsCount.rows[0].count;
+      status.counts.emptyBins = emptyBins.rows[0].count;
+    }
+    
+    // Check Bin_Inventory table
+    if (status.existingTables.includes('Bin_Inventory')) {
+      const inventoryCount = await client.query('SELECT COUNT(*) as count FROM "Bin_Inventory"');
+      status.counts.inventoryRecords = inventoryCount.rows[0].count;
+    }
+    
+    // Check Incoming table
+    if (status.existingTables.includes('Incoming')) {
+      const incomingCount = await client.query('SELECT COUNT(*) as count FROM "Incoming"');
+      const recentIncoming = await client.query('SELECT id, sku, quantity, bin_no, operator_id FROM "Incoming" ORDER BY incoming_date DESC LIMIT 5');
+      status.counts.incomingRecords = incomingCount.rows[0].count;
+      status.tables.incoming = recentIncoming.rows;
+    }
+    
+    // Check Outgoing table
+    if (status.existingTables.includes('Outgoing')) {
+      const outgoingCount = await client.query('SELECT COUNT(*) as count FROM "Outgoing"');
+      const recentOutgoing = await client.query('SELECT id, sku, quantity, bin_no, operator_id FROM "Outgoing" ORDER BY outgoing_date DESC LIMIT 5');
+      status.counts.outgoingRecords = outgoingCount.rows[0].count;
+      status.tables.outgoing = recentOutgoing.rows;
+    }
     
     // Check Operators table
     if (status.existingTables.includes('Operators')) {
