@@ -65,41 +65,6 @@
                 </div>
             </div>
 
-            <!-- Task History -->
-            <div class="dashboard-section history-section">
-                <h2>Task History</h2>
-                <div class="task-history">
-                    <div class="history-legend">
-                        <span class="legend-item incomplete">⬤ Incomplete</span>
-                        <span class="legend-item complete">⬤ Complete</span>
-                    </div>
-                    <div id="task-list" class="task-list">
-                        <!-- Tasks will be loaded dynamically -->
-                        <div class="task-item incomplete">
-                            <div class="task-info">
-                                <span class="task-sku">SKU001</span>
-                                <span class="task-qty">50 units</span>
-                            </div>
-                            <span class="task-date">2 hours ago</span>
-                        </div>
-                        <div class="task-item complete">
-                            <div class="task-info">
-                                <span class="task-sku">SKU002</span>
-                                <span class="task-qty">20 units</span>
-                            </div>
-                            <span class="task-date">5 hours ago</span>
-                        </div>
-                        <div class="task-item incomplete">
-                            <div class="task-info">
-                                <span class="task-sku">SKU003</span>
-                                <span class="task-qty">35 units</span>
-                            </div>
-                            <span class="task-date">1 day ago</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- Reminders -->
             <div class="dashboard-section reminders-section">
                 <h2>⚠️ Expiry Reminders</h2>
@@ -133,19 +98,19 @@
                 <h2>Quick Statistics</h2>
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <div class="stat-value">156</div>
+                        <div class="stat-value" id="stat-active-bins">-</div>
                         <div class="stat-label">Active Bins</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">42</div>
+                        <div class="stat-value" id="stat-sku-types">-</div>
                         <div class="stat-label">SKU Types</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">2,450</div>
+                        <div class="stat-value" id="stat-total-units">-</div>
                         <div class="stat-label">Total Units</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">12</div>
+                        <div class="stat-value" id="stat-empty-bins">-</div>
                         <div class="stat-label">Empty Bins</div>
                     </div>
                 </div>

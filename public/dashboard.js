@@ -53,7 +53,14 @@ async function loadTaskHistory() {
     const taskType = document.getElementById('task-type-filter')?.value || '';
     const historyList = document.getElementById('task-history-list');
     
-    if (!sessionToken || !historyList) {
+    if (!historyList) {
+        console.error('Task history list element not found');
+        return;
+    }
+    
+    if (!sessionToken) {
+        historyList.innerHTML = '<p style="text-align: center; color: #f44336; padding: 20px;">⚠️ Please log in to view task history</p>';
+        console.error('No session token found');
         return;
     }
     
@@ -70,8 +77,15 @@ async function loadTaskHistory() {
             params.append('taskType', taskType);
         }
         
+        console.log('Fetching task history with params:', params.toString());
         const response = await fetch(`/api/task-history?${params}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
+        console.log('Task history response:', data);
         
         if (data.success && data.taskHistory && data.taskHistory.length > 0) {
             historyList.innerHTML = '';
@@ -141,12 +155,16 @@ async function loadStats() {
         const response = await fetch('/api/reports/summary');
         const data = await response.json();
         
-        // Update stats
-        const statCards = document.querySelectorAll('.stat-card');
-        if (statCards[0]) statCards[0].querySelector('.stat-value').textContent = data.activeBins;
-        if (statCards[1]) statCards[1].querySelector('.stat-value').textContent = data.skuTypes;
-        if (statCards[2]) statCards[2].querySelector('.stat-value').textContent = data.totalUnits;
-        if (statCards[3]) statCards[3].querySelector('.stat-value').textContent = data.emptyBins;
+        // Update stats with IDs
+        const activeBinsEl = document.getElementById('stat-active-bins');
+        const skuTypesEl = document.getElementById('stat-sku-types');
+        const totalUnitsEl = document.getElementById('stat-total-units');
+        const emptyBinsEl = document.getElementById('stat-empty-bins');
+        
+        if (activeBinsEl) activeBinsEl.textContent = data.activeBins || '0';
+        if (skuTypesEl) skuTypesEl.textContent = data.skuTypes || '0';
+        if (totalUnitsEl) totalUnitsEl.textContent = data.totalUnits || '0';
+        if (emptyBinsEl) emptyBinsEl.textContent = data.emptyBins || '0';
         
         console.log('Statistics loaded:', data);
     } catch (error) {
