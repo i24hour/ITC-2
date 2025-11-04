@@ -993,12 +993,20 @@ app.post('/api/bins/update', async (req, res) => {
         // Update existing row
         currentCFC = existingResult.rows[0].cfc;
         newCFC = currentCFC + parseInt(quantity);
+        const batchNo = existingResult.rows[0].batch_no;
         
         await client.query(
           `UPDATE "Inventory" 
            SET cfc = $1, updated_at = CURRENT_TIMESTAMP
            WHERE bin_no = $2 AND sku = $3`,
           [newCFC, binId, sku]
+        );
+        
+        // Log to Incoming table
+        await client.query(
+          `INSERT INTO "Incoming" (sku, batch_no, description, quantity, weight, uom, bin_no, operator_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [sku, batchNo, description, parseInt(quantity), weight, uom, binId, null]
         );
       } else {
         // Insert new row with new batch format: Z05NOV25
@@ -1008,6 +1016,13 @@ app.post('/api/bins/update', async (req, res) => {
           `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom, weight)
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [binId, sku, batchNo, newCFC, description, uom, weight]
+        );
+        
+        // Also log to Incoming table
+        await client.query(
+          `INSERT INTO "Incoming" (sku, batch_no, description, quantity, weight, uom, bin_no, operator_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [sku, batchNo, description, parseInt(quantity), weight, uom, binId, null]
         );
       }
     } else {
@@ -1098,6 +1113,13 @@ app.post('/api/bins/dispatch', async (req, res) => {
        SET cfc = $1, qty = $2, updated_at = CURRENT_TIMESTAMP
        WHERE bin_no = $3 AND sku = $4`,
       [newCFC, newQTY, binId, sku]
+    );
+    
+    // Log to Outgoing table
+    await client.query(
+      `INSERT INTO "Outgoing" (sku, batch_no, description, quantity, weight, uom, bin_no, operator_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [sku, batch, currentRow.description, parseInt(quantity), null, uom, binId, null]
     );
     
     // Log transaction
