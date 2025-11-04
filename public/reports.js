@@ -49,30 +49,218 @@ async function loadReportData() {
 }
 
 async function generateReport(dateRange, reportType) {
-    // TODO: Fetch filtered data from API
-    /*
-    const response = await fetch(`/api/reports?range=${dateRange}&type=${reportType}`);
-    const data = await response.json();
-    */
+    try {
+        const reportOutput = document.getElementById('report-output');
+        const reportContent = document.getElementById('report-content');
+        
+        // Show loading state
+        reportOutput.style.display = 'block';
+        reportContent.innerHTML = '<p style="text-align: center; padding: 40px;">Loading report data...</p>';
+        
+        // Fetch data from API
+        const response = await fetch(`/api/reports?type=${reportType}&dateRange=${dateRange}`);
+        const result = await response.json();
+        
+        if (!result.success) {
+            throw new Error('Failed to fetch report data');
+        }
+        
+        // Generate report HTML based on type
+        let html = '';
+        
+        if (reportType === 'incoming' || reportType === 'all') {
+            html += generateIncomingTable(result.data.incoming || []);
+        }
+        
+        if (reportType === 'outgoing' || reportType === 'all') {
+            html += generateOutgoingTable(result.data.outgoing || []);
+        }
+        
+        if (reportType === 'inventory') {
+            html += generateInventoryTable(result.data.inventory || []);
+        }
+        
+        if (reportType === 'all') {
+            html = '<h3>All Activities Report</h3>' + html;
+        }
+        
+        reportContent.innerHTML = html || '<p style="text-align: center; color: #666;">No data found for selected filters.</p>';
+        
+    } catch (error) {
+        console.error('Error generating report:', error);
+        document.getElementById('report-content').innerHTML = 
+            '<p style="text-align: center; color: red;">Error loading report. Please try again.</p>';
+    }
+}
+
+function generateIncomingTable(data) {
+    if (!data || data.length === 0) {
+        return '<p>No incoming records found.</p>';
+    }
     
-    alert(`Generating ${reportType} report for ${dateRange}`);
-    // Update tables with filtered data
+    let html = `
+        <h3>📥 Incoming Records (${data.length})</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+            <thead>
+                <tr style="background: #f5f5f5; text-align: left;">
+                    <th style="padding: 12px; border: 1px solid #ddd;">Date</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">SKU</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Batch No</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Quantity</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Weight (kg)</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Bin No</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Operator</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Description</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    data.forEach(row => {
+        const date = new Date(row.incoming_date).toLocaleString();
+        html += `
+            <tr>
+                <td style="padding: 10px; border: 1px solid #ddd;">${date}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;"><strong>${row.sku}</strong></td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.batch_no}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.quantity}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.weight || 'N/A'}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.bin_no || 'N/A'}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.operator_id || 'N/A'}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px;">${row.description || ''}</td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table>';
+    return html;
+}
+
+function generateOutgoingTable(data) {
+    if (!data || data.length === 0) {
+        return '<p>No outgoing records found.</p>';
+    }
+    
+    let html = `
+        <h3>📤 Outgoing Records (${data.length})</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+            <thead>
+                <tr style="background: #f5f5f5; text-align: left;">
+                    <th style="padding: 12px; border: 1px solid #ddd;">Date</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">SKU</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Batch No</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Quantity</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Weight (kg)</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Bin No</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Operator</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Description</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    data.forEach(row => {
+        const date = new Date(row.outgoing_date).toLocaleString();
+        html += `
+            <tr>
+                <td style="padding: 10px; border: 1px solid #ddd;">${date}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;"><strong>${row.sku}</strong></td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.batch_no}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.quantity}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.weight || 'N/A'}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.bin_no || 'N/A'}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.operator_id || 'N/A'}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px;">${row.description || ''}</td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table>';
+    return html;
+}
+
+function generateInventoryTable(data) {
+    if (!data || data.length === 0) {
+        return '<p>No inventory records found.</p>';
+    }
+    
+    let html = `
+        <h3>📦 Current Inventory (${data.length} bins)</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+            <thead>
+                <tr style="background: #f5f5f5; text-align: left;">
+                    <th style="padding: 12px; border: 1px solid #ddd;">Bin No</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">SKU</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Batch No</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Quantity (CFC)</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">UOM (kg/CFC)</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Weight (kg)</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Description</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Last Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    data.forEach(row => {
+        const updated = new Date(row.updated_at).toLocaleString();
+        html += `
+            <tr>
+                <td style="padding: 10px; border: 1px solid #ddd;"><strong>${row.bin_no}</strong></td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.sku}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.batch_no}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.quantity}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.uom || 'N/A'}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${row.weight || 'N/A'}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px;">${row.description || ''}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; font-size: 12px;">${updated}</td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table>';
+    return html;
 }
 
 function exportToCSV() {
-    // Get table data
-    const activityTable = document.getElementById('activity-table-body');
-    const rows = activityTable.querySelectorAll('tr');
+    const reportContent = document.getElementById('report-content');
+    const tables = reportContent.querySelectorAll('table');
     
-    let csv = 'Timestamp,Type,SKU,Bin ID,Quantity,Operator,Status\n';
+    if (tables.length === 0) {
+        alert('Please generate a report first before exporting.');
+        return;
+    }
     
-    rows.forEach(row => {
-        const cells = row.querySelectorAll('td');
-        const rowData = Array.from(cells).map(cell => {
-            // Remove badge HTML, get text only
-            return cell.textContent.trim();
+    let csv = '';
+    
+    tables.forEach((table, index) => {
+        // Add table heading
+        const heading = reportContent.querySelectorAll('h3')[index];
+        if (heading) {
+            csv += heading.textContent + '\n\n';
+        }
+        
+        // Get headers
+        const headers = table.querySelectorAll('thead th');
+        const headerRow = Array.from(headers).map(th => th.textContent.trim()).join(',');
+        csv += headerRow + '\n';
+        
+        // Get rows
+        const rows = table.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            const rowData = Array.from(cells).map(cell => {
+                let text = cell.textContent.trim();
+                // Escape commas in text
+                if (text.includes(',')) {
+                    text = `"${text}"`;
+                }
+                return text;
+            });
+            csv += rowData.join(',') + '\n';
         });
-        csv += rowData.join(',') + '\n';
+        
+        csv += '\n\n';
     });
     
     // Create download link
@@ -96,30 +284,4 @@ function renderCharts() {
             labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
             datasets: [{
                 label: 'Incoming',
-                data: [120, 150, 180, 160],
-                borderColor: '#3b82f6',
-                backgroundColor: 'rgba(59, 130, 246, 0.1)'
-            }, {
-                label: 'Outgoing',
-                data: [100, 130, 140, 150],
-                borderColor: '#ef4444',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)'
-            }]
-        }
-    });
-    
-    // Top SKUs Bar Chart
-    const skuCtx = document.getElementById('sku-chart').getContext('2d');
-    new Chart(skuCtx, {
-        type: 'bar',
-        data: {
-            labels: ['SKU001', 'SKU002', 'SKU003', 'SKU004', 'SKU005'],
-            datasets: [{
-                label: 'Volume',
-                data: [450, 380, 320, 280, 250],
-                backgroundColor: '#10b981'
-            }]
-        }
-    });
-}
-*/
+                data: [120, 150, 

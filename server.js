@@ -1894,6 +1894,87 @@ app.get('/api/bins/qr-all', async (req, res) => {
   }
 });
 
+// ==================== REPORTS API ENDPOINTS ====================
+
+// Get report data based on type and date range
+app.get('/api/reports', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { type, dateRange } = req.query;
+    
+    // Calculate date filter based on range
+    let dateFilter = '';
+    const now = new Date();
+    
+    switch(dateRange) {
+      case 'today':
+        dateFilter = `AND DATE(incoming_date) = CURRENT_DATE`;
+        break;
+      case 'week':
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        dateFilter = `AND incoming_date >= '${weekAgo.toISOString()}'`;
+        break;
+      case 'month':
+        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        dateFilter = `AND incoming_date >= '${monthAgo.toISOString()}'`;
+        break;
+      default:
+        dateFilter = '';
+    }
+    
+    let data = {};
+    
+    // Fetch data based on report type
+    if (type === 'incoming' || type === 'all') {
+      const incomingQuery = `
+        SELECT id, sku, batch_no, quantity, bin_no, operator_id, 
+               incoming_date, description, weight
+        FROM "Incoming"
+        WHERE 1=1 ${dateFilter}
+        ORDER BY incoming_date DESC
+        LIMIT 100
+      `;
+      const incomingResult = await client.query(incomingQuery);
+      data.incoming = incomingResult.rows;
+    }
+    
+    if (type === 'outgoing' || type === 'all') {
+      const outgoingQuery = `
+        SELECT id, sku, batch_no, quantity, bin_no, operator_id, 
+               outgoing_date, description, weight
+        FROM "Outgoing"
+        WHERE 1=1 ${dateFilter.replace('incoming_date', 'outgoing_date')}
+        ORDER BY outgoing_date DESC
+        LIMIT 100
+      `;
+      const outgoingResult = await client.query(outgoingQuery);
+      data.outgoing = outgoingResult.rows;
+    }
+    
+    if (type === 'inventory') {
+      const inventoryQuery = `
+        SELECT bin_no, sku, batch_no, cfc as quantity, 
+               description, uom, weight, created_at, updated_at
+        FROM "Inventory"
+        WHERE cfc > 0
+        ORDER BY bin_no, sku
+      `;
+      const inventoryResult = await client.query(inventoryQuery);
+      data.inventory = inventoryResult.rows;
+    }
+    
+    res.json({ success: true, data });
+    
+  } catch (error) {
+    console.error('Error fetching report data:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ==================== SERVER START ====================
+
 // Start server
 app.listen(PORT, async () => {
   console.log(`\n🚀 Server running!`);
