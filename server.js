@@ -2007,28 +2007,30 @@ app.get('/api/reports', async (req, res) => {
     
     if (type === 'inventory') {
       try {
-        // First check if table exists and has data
-        const countQuery = `SELECT COUNT(*) as total FROM "Inventory"`;
-        const countResult = await client.query(countQuery);
-        console.log('Inventory table total records:', countResult.rows[0].total);
-        
+        // Simplified query without COALESCE for better compatibility
         const inventoryQuery = `
-          SELECT bin_no, sku, 
-                 COALESCE(batch_no, 'N/A') as batch_no, 
-                 COALESCE(cfc, 0) as quantity, 
-                 COALESCE(description, '') as description, 
-                 COALESCE(uom, 0) as uom, 
-                 weight, 
-                 created_at, 
-                 updated_at
+          SELECT bin_no, sku, batch_no, cfc as quantity, 
+                 description, uom, weight, created_at, updated_at
           FROM "Inventory"
           WHERE cfc > 0
           ORDER BY bin_no, sku
           LIMIT 200
         `;
         const inventoryResult = await client.query(inventoryQuery);
-        console.log('Inventory records with cfc > 0:', inventoryResult.rows.length);
-        data.inventory = inventoryResult.rows;
+        console.log('Inventory query successful, rows:', inventoryResult.rows.length);
+        
+        // Handle NULL values in JavaScript instead
+        data.inventory = inventoryResult.rows.map(row => ({
+          bin_no: row.bin_no,
+          sku: row.sku,
+          batch_no: row.batch_no || 'N/A',
+          quantity: row.quantity || 0,
+          description: row.description || '',
+          uom: row.uom || 0,
+          weight: row.weight,
+          created_at: row.created_at,
+          updated_at: row.updated_at
+        }));
       } catch (err) {
         console.error('Error fetching inventory data:', err);
         console.error('Error details:', err.message, err.stack);
