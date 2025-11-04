@@ -42,4 +42,6 @@ read-excel-inventory.js
 database/complete-restructure.js
 database/import-sku-master.js
 database/restructure-database.js
+# Documentation files (not needed in deployment)
 DATABASE_RESTRUCTURE_README.md
+DATABASE_5_TABLES_STRUCTURE.md
