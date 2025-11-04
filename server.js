@@ -327,10 +327,19 @@ app.get('/api/inventory', async (req, res) => {
 // Get all available SKUs
 app.get('/api/sku-list', async (req, res) => {
   try {
-    // Fetch from Cleaned_FG_Master_file table (new 5-table structure)
-    const result = await db.query(
-      `SELECT sku FROM "Cleaned_FG_Master_file" ORDER BY sku`
-    );
+    // Try new table first, fallback to old table if it doesn't exist
+    let result;
+    try {
+      result = await db.query(
+        `SELECT sku FROM "Cleaned_FG_Master_file" ORDER BY sku`
+      );
+    } catch (err) {
+      // Fallback to old table structure if new table doesn't exist
+      console.log('Cleaned_FG_Master_file not found, using active_skus');
+      result = await db.query(
+        `SELECT sku FROM active_skus WHERE is_active = true ORDER BY sku`
+      );
+    }
     
     const skus = result.rows.map(row => row.sku);
     res.json({ skus });
@@ -344,10 +353,22 @@ app.get('/api/sku-list', async (req, res) => {
 app.get('/api/sku-details/:sku', async (req, res) => {
   try {
     const { sku } = req.params;
-    const result = await db.query(
-      `SELECT sku, description, uom FROM "Cleaned_FG_Master_file" WHERE sku = $1`,
-      [sku]
-    );
+    let result;
+    
+    try {
+      // Try new table first
+      result = await db.query(
+        `SELECT sku, description, uom FROM "Cleaned_FG_Master_file" WHERE sku = $1`,
+        [sku]
+      );
+    } catch (err) {
+      // Fallback: Get from inventory table (old structure)
+      console.log('Cleaned_FG_Master_file not found, getting from inventory');
+      result = await db.query(
+        `SELECT DISTINCT sku, description, uom FROM inventory WHERE sku = $1 LIMIT 1`,
+        [sku]
+      );
+    }
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'SKU not found' });
@@ -365,24 +386,40 @@ app.get('/api/bins/available', async (req, res) => {
   try {
     const { sku } = req.query;
     
-    // Get bins with the requested SKU from Inventory
-    const inventoryResult = await db.query(
-      `SELECT bin_no, sku, cfc, batch_no, created_at 
-       FROM "Inventory" 
-       WHERE sku = $1 
-       ORDER BY created_at ASC`,
-      [sku]
-    );
+    let inventoryResult, emptyBinsResult;
     
-    // Get all empty bins from Bins table (bins not in Inventory for any SKU)
-    const emptyBinsResult = await db.query(
-      `SELECT b.bin_no 
-       FROM "Bins" b
-       WHERE NOT EXISTS (
-         SELECT 1 FROM "Inventory" i WHERE i.bin_no = b.bin_no
-       )
-       ORDER BY b.bin_no`
-    );
+    // Try new table structure first
+    try {
+      // Get bins with the requested SKU from Inventory
+      inventoryResult = await db.query(
+        `SELECT bin_no, sku, cfc, batch_no, created_at 
+         FROM "Inventory" 
+         WHERE sku = $1 
+         ORDER BY created_at ASC`,
+        [sku]
+      );
+      
+      // Get all empty bins from Bins table (bins not in Inventory for any SKU)
+      emptyBinsResult = await db.query(
+        `SELECT b.bin_no 
+         FROM "Bins" b
+         WHERE NOT EXISTS (
+           SELECT 1 FROM "Inventory" i WHERE i.bin_no = b.bin_no
+         )
+         ORDER BY b.bin_no`
+      );
+    } catch (err) {
+      // Fallback to old table structure
+      console.log('New tables not found, using old inventory table');
+      inventoryResult = await db.query(
+        `SELECT bin_no, sku, cfc, batch_no, created_at 
+         FROM inventory 
+         WHERE sku = $1 
+         ORDER BY created_at ASC`,
+        [sku]
+      );
+      emptyBinsResult = { rows: [] }; // No separate bins table in old structure
+    }
     
     const partialBins = [];
     const fullBins = [];
