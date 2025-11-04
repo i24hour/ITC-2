@@ -1027,6 +1027,9 @@ app.post('/api/bins/scan', async (req, res) => {
 
     const task = taskResult.rows[0];
 
+    // Normalize task type (DB column is `task_type`; older code may expect `type`)
+    const taskType = task.task_type || task.type || taskType;
+
     // Validate session token matches the task's session_token
     if (!task.session_token || task.session_token !== sessionToken) {
       return res.status(401).json({ error: 'Session token does not match task', detail: 'This task was created by a different user session' });
@@ -1051,8 +1054,8 @@ app.post('/api/bins/scan', async (req, res) => {
 
     await client.query('BEGIN');
 
-    const isIncoming = task.type === 'incoming';
-    const isOutgoing = task.type === 'outgoing';
+  const isIncoming = (task.task_type || task.type) === 'incoming' || taskType === 'incoming';
+  const isOutgoing = (task.task_type || task.type) === 'outgoing' || taskType === 'outgoing';
 
     if (isOutgoing) {
       // OUTGOING: Deduct from bin
