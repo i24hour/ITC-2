@@ -70,13 +70,12 @@ app.post('/api/auth/login', async (req, res) => {
     
     // Try to fetch from Operators table
     try {
-      let operatorResult = await client.query(
+      const operatorResult = await client.query(
         `SELECT operator_id, name, email FROM "Operators" WHERE email = $1`,
         [email]
       );
       
       if (operatorResult.rows.length > 0) {
-        // Operator exists - use existing ID
         const operator = operatorResult.rows[0];
         operatorId = operator.operator_id;
         operatorName = operator.name;
@@ -87,26 +86,7 @@ app.post('/api/auth/login', async (req, res) => {
           [operatorId]
         );
       } else {
-        // Operator doesn't exist - auto-create for existing user
-        console.log(`🆕 Auto-creating operator for existing user: ${email}`);
-        
-        await client.query('BEGIN');
-        
-        // Get next operator ID
-        const countResult = await client.query(`SELECT COUNT(*) as count FROM "Operators"`);
-        const nextNumber = parseInt(countResult.rows[0].count) + 1;
-        operatorId = `OP${String(nextNumber).padStart(3, '0')}`;
-        
-        // Insert new operator
-        await client.query(
-          `INSERT INTO "Operators" (operator_id, name, email, role, created_at, last_login)
-           VALUES ($1, $2, $3, 'operator', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-          [operatorId, operatorName, email]
-        );
-        
-        await client.query('COMMIT');
-        
-        console.log(`✅ Created operator ${operatorId} for ${email}`);
+        return res.status(401).json({ error: 'Operator not found. Please sign up first.' });
       }
     } catch (err) {
       console.log('Operators table not found, using session-only auth');
@@ -275,7 +255,7 @@ app.post('/api/auth/validate', async (req, res) => {
 
 // Task History - Log task completion
 app.post('/api/tasks/complete', async (req, res) => {
-  const client = await pool.connect();
+  const client = await db.getClient();
   try {
     const { sessionToken, taskType, sku, quantity, binsUsed, startedAt } = req.body;
     
@@ -328,7 +308,7 @@ app.post('/api/tasks/complete', async (req, res) => {
 
 // Task History - Get all task history (for dashboard)
 app.get('/api/task-history', async (req, res) => {
-  const client = await pool.connect();
+  const client = await db.getClient();
   try {
     const { sessionToken, operatorId, taskType, startDate, endDate, limit = 100 } = req.query;
     

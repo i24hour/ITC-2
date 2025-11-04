@@ -43,7 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (result.success) {
                 // Store user data and server-issued session token
                 localStorage.setItem('user', JSON.stringify({ 
-                    operatorId: result.user.operatorId,
                     email: result.user.email,
                     name: result.user.name,
                     role: role,
@@ -53,11 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     loginTime: new Date().toISOString()
                 }));
                 
-                // Also store session token separately for easy access
-                localStorage.setItem('sessionToken', result.sessionToken);
-                
                 console.log('✅ Login successful with server session');
-                console.log(`👤 Operator ID: ${result.user.operatorId}`);
                 
                 // Redirect to dashboard
                 window.location.href = 'dashboard.html';
@@ -99,7 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (result.success) {
                 // Store user data and server-issued session token
                 localStorage.setItem('user', JSON.stringify({ 
-                    operatorId: result.user.operatorId,
                     email: result.user.email,
                     name: result.user.name,
                     role: role,
@@ -109,14 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     loginTime: new Date().toISOString()
                 }));
                 
-                // Also store session token separately for easy access
-                localStorage.setItem('sessionToken', result.sessionToken);
-                
                 console.log('✅ Signup successful with server session');
-                console.log(`👤 Your Operator ID: ${result.user.operatorId}`);
-                
-                // Show success message with operator ID
-                alert(`Welcome! Your Operator ID is: ${result.user.operatorId}`);
                 
                 // Redirect to dashboard
                 window.location.href = 'dashboard.html';
@@ -168,10 +155,9 @@ async function validateSession() {
         const result = await response.json();
         
         if (result.valid) {
-            // Update local storage with fresh data including operator ID
+            // Update local storage with fresh data
             localStorage.setItem('user', JSON.stringify({
                 ...user,
-                operatorId: result.user.operatorId || user.operatorId,
                 expiresAt: result.expiresAt
             }));
             return true;

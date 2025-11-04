@@ -19,12 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set user name
     const userNameElement = document.getElementById('user-name');
     if (userNameElement) {
-        // Display operator ID if available, along with name
-        if (user.operatorId) {
-            userNameElement.textContent = `${user.operatorId} - ${user.name || user.email}`;
-        } else {
-            userNameElement.textContent = user.name || user.email;
-        }
+        userNameElement.textContent = user.name || user.email;
     }
 
     // Logout handler
