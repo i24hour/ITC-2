@@ -1986,11 +1986,18 @@ app.get('/api/reports', async (req, res) => {
     if (type === 'inventory') {
       try {
         const inventoryQuery = `
-          SELECT bin_no, sku, batch_no, cfc as quantity, 
-                 description, uom, weight, created_at, updated_at
+          SELECT bin_no, sku, 
+                 COALESCE(batch_no, 'N/A') as batch_no, 
+                 COALESCE(cfc, 0) as quantity, 
+                 COALESCE(description, '') as description, 
+                 COALESCE(uom, 0) as uom, 
+                 weight, 
+                 created_at, 
+                 updated_at
           FROM "Inventory"
           WHERE cfc > 0
           ORDER BY bin_no, sku
+          LIMIT 200
         `;
         const inventoryResult = await client.query(inventoryQuery);
         data.inventory = inventoryResult.rows;
