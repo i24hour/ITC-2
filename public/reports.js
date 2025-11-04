@@ -59,10 +59,15 @@ async function generateReport(dateRange, reportType) {
         
         // Fetch data from API
         const response = await fetch(`/api/reports?type=${reportType}&dateRange=${dateRange}`);
+        
+        if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+        }
+        
         const result = await response.json();
         
         if (!result.success) {
-            throw new Error('Failed to fetch report data');
+            throw new Error(result.error || 'Failed to fetch report data');
         }
         
         // Generate report HTML based on type
@@ -89,7 +94,7 @@ async function generateReport(dateRange, reportType) {
     } catch (error) {
         console.error('Error generating report:', error);
         document.getElementById('report-content').innerHTML = 
-            '<p style="text-align: center; color: red;">Error loading report. Please try again.</p>';
+            `<p style="text-align: center; color: red;">Error loading report: ${error.message}<br/>Please try again.</p>`;
     }
 }
 
