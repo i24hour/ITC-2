@@ -65,8 +65,14 @@ const getClient = async () => {
     return client;
 };
 
+// End the pool (for cleanup)
+const end = async () => {
+    await pool.end();
+};
+
 module.exports = {
     query,
     pool,
-    getClient
+    getClient,
+    end
 };
