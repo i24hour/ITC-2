@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (result.success) {
                 // Store user data and server-issued session token
                 localStorage.setItem('user', JSON.stringify({ 
+                    operatorId: result.user.operatorId,
                     email: result.user.email,
                     name: result.user.name,
                     role: role,
@@ -52,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     loginTime: new Date().toISOString()
                 }));
                 
-                console.log('✅ Login successful with server session');
+                console.log('✅ Login successful with server session, Operator ID:', result.user.operatorId);
                 
                 // Redirect to dashboard
                 window.location.href = 'dashboard.html';
@@ -94,6 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (result.success) {
                 // Store user data and server-issued session token
                 localStorage.setItem('user', JSON.stringify({ 
+                    operatorId: result.user.operatorId,
                     email: result.user.email,
                     name: result.user.name,
                     role: role,
@@ -103,7 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     loginTime: new Date().toISOString()
                 }));
                 
-                console.log('✅ Signup successful with server session');
+                console.log('✅ Signup successful with server session, Operator ID:', result.user.operatorId);
                 
                 // Redirect to dashboard
                 window.location.href = 'dashboard.html';

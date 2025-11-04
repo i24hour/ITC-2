@@ -16,10 +16,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Set user name
+    // Set user name and operator ID
     const userNameElement = document.getElementById('user-name');
     if (userNameElement) {
-        userNameElement.textContent = user.name || user.email;
+        if (user.operatorId && user.operatorId.startsWith('OP')) {
+            // Display: OP001 - Name
+            userNameElement.innerHTML = `<span style="color: #2196F3; font-weight: bold;">${user.operatorId}</span> - ${user.name || user.email}`;
+        } else {
+            userNameElement.textContent = user.name || user.email;
+        }
     }
 
     // Logout handler
@@ -32,7 +37,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load dashboard data
     loadTaskHistory();
     loadReminders();
-    loadStats();
 
     // Task history filter and refresh
     const taskTypeFilter = document.getElementById('task-type-filter');
@@ -49,7 +53,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Load task history
 async function loadTaskHistory() {
-    const sessionToken = localStorage.getItem('sessionToken');
+    // Get session token from user object
+    const user = JSON.parse(localStorage.getItem('user'));
+    const sessionToken = user?.sessionToken;
     const taskType = document.getElementById('task-type-filter')?.value || '';
     const historyList = document.getElementById('task-history-list');
     
@@ -60,7 +66,7 @@ async function loadTaskHistory() {
     
     if (!sessionToken) {
         historyList.innerHTML = '<p style="text-align: center; color: #f44336; padding: 20px;">⚠️ Please log in to view task history</p>';
-        console.error('No session token found');
+        console.error('No session token found. User object:', user);
         return;
     }
     
