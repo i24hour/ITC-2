@@ -70,6 +70,11 @@ async function generateReport(dateRange, reportType) {
             throw new Error(result.error || 'Failed to fetch report data');
         }
         
+        // Debug logging
+        console.log('Report API Response:', result);
+        console.log('Report Type:', reportType);
+        console.log('Inventory Data:', result.data.inventory);
+        
         // Generate report HTML based on type
         let html = '';
         
@@ -82,6 +87,7 @@ async function generateReport(dateRange, reportType) {
         }
         
         if (reportType === 'inventory') {
+            console.log('Generating inventory table with', result.data.inventory?.length || 0, 'records');
             html += generateInventoryTable(result.data.inventory || []);
         }
         
