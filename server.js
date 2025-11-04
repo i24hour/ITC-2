@@ -67,6 +67,7 @@ app.post('/api/auth/login', async (req, res) => {
     
     let operatorId = null;
     let operatorName = name || email;
+    let useNewStructure = false;
     
     // Try to fetch from Operators table
     try {
@@ -76,9 +77,11 @@ app.post('/api/auth/login', async (req, res) => {
       );
       
       if (operatorResult.rows.length > 0) {
+        // Operator found in new structure
         const operator = operatorResult.rows[0];
         operatorId = operator.operator_id;
         operatorName = operator.name;
+        useNewStructure = true;
         
         // Update last login
         await client.query(
@@ -86,17 +89,21 @@ app.post('/api/auth/login', async (req, res) => {
           [operatorId]
         );
       } else {
-        return res.status(401).json({ error: 'Operator not found. Please sign up first.' });
+        // Operators table exists but user not found - allow session-only login
+        console.log('User not found in Operators table, creating session-only login');
+        operatorId = email;
       }
     } catch (err) {
-      console.log('Operators table not found, using session-only auth');
+      // Operators table doesn't exist - use session-only auth
+      console.log('Operators table not found, using session-only auth:', err.message);
       operatorId = email;
     }
     
     const sessionResult = await sessions.createSession(email, operatorName, operatorId);
     
     if (!sessionResult.success) {
-      return res.status(500).json({ error: 'Failed to create session' });
+      console.error('Failed to create session:', sessionResult.error);
+      return res.status(500).json({ error: 'Failed to create session: ' + sessionResult.error });
     }
     
     res.json({
