@@ -327,8 +327,9 @@ app.get('/api/inventory', async (req, res) => {
 // Get all available SKUs
 app.get('/api/sku-list', async (req, res) => {
   try {
+    // Fetch from sku_master table (new structure after restructure)
     const result = await db.query(
-      `SELECT sku FROM active_skus WHERE is_active = true ORDER BY sku`
+      `SELECT sku FROM sku_master ORDER BY sku`
     );
     
     const skus = result.rows.map(row => row.sku);

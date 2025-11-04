@@ -103,14 +103,22 @@ async function loadFIFOBins() {
         const data = await response.json();
         
         if (!data.bins || data.bins.length === 0) {
-            alert(`No match found!\n\nNo bins found with:\n- SKU: ${outgoingData.sku}\n- Batch: ${outgoingData.batch}\n\nPlease verify the SKU and Batch Number.`);
+            alert(`No inventory found!\n\nNo bins found with:\n- SKU: ${outgoingData.sku}\n- Batch: ${outgoingData.batch}\n\nAll bins are currently empty (CFC = 0).\nPlease add inventory first using the Incoming tab.`);
             document.getElementById('step2-outgoing').classList.remove('active');
             document.getElementById('step1-outgoing').classList.add('active');
             return;
         }
         
-        // Calculate total available
+        // Calculate total available (bins can have CFC = 0)
         const totalAvailable = data.bins.reduce((sum, bin) => sum + bin.quantity, 0);
+        
+        // If total available is 0, show message
+        if (totalAvailable === 0) {
+            alert(`No inventory available!\n\nBins found for SKU "${outgoingData.sku}" and Batch "${outgoingData.batch}", but all have CFC = 0.\n\nPlease add inventory first using the Incoming tab.`);
+            document.getElementById('step2-outgoing').classList.remove('active');
+            document.getElementById('step1-outgoing').classList.add('active');
+            return;
+        }
         
         // Store all bins for manual selection
         fifoBins = data.bins.map(bin => ({
