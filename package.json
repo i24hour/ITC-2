@@ -11,6 +11,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "migrate": "node database/migrate.js",
+    "restructure": "node database/restructure.js",
     "test:db": "node test-db.js",
     "setup:postgres": "chmod +x setup-postgres.sh && ./setup-postgres.sh",
     "generate:qr": "node generate-bin-qrcodes.js"

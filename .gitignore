@@ -39,3 +39,6 @@ export-inventory.js
 show-inventory.js
 fetch-inventory.js
 read-excel-inventory.js
+database/complete-restructure.js
+database/import-sku-master.js
+database/restructure-database.js
