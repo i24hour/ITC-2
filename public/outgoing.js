@@ -154,9 +154,9 @@ function renderFIFOBins() {
         const infoDiv = document.createElement('div');
         infoDiv.style.cssText = 'flex: 1;';
         infoDiv.innerHTML = `
-            <div class="fifo-bin-name" style="font-weight: bold; font-size: 18px;">#${index + 1} - ${bin.id}</div>
-            <div class="fifo-bin-date" style="color: #666; font-size: 14px;">Date: ${bin.date} (${bin.daysOld} days old)</div>
-            ${bin.batch ? `<div class="fifo-bin-batch" style="color: #666; font-size: 14px;">Batch: ${bin.batch}</div>` : ''}
+            <div class="bin-name" style="font-weight: bold; font-size: 18px;">${bin.id}</div>
+            <div class="bin-date" style="color: #666; font-size: 14px;">Date: ${bin.date} (${bin.daysOld} days old)</div>
+            ${bin.batch ? `<div class="bin-batch" style="color: #666; font-size: 14px;">Batch: ${bin.batch}</div>` : ''}
         `;
         
         // Quantity display
