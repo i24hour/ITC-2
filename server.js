@@ -328,9 +328,38 @@ app.get('/api/task-history', async (req, res) => {
     }
     
     // Validate session
-    const validation = await sessions.validateSession(sessionToken);
+    let validation;
+    try {
+      validation = await sessions.validateSession(sessionToken);
+    } catch (sessionError) {
+      console.error('Session validation error:', sessionError);
+      return res.status(500).json({ error: 'Session validation failed: ' + sessionError.message });
+    }
+    
     if (!validation.valid) {
       return res.status(401).json({ error: 'Invalid or expired session' });
+    }
+    
+    // Check if Task_History table exists, if not return empty array
+    try {
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_name = 'Task_History'
+        );
+      `);
+      
+      if (!tableCheck.rows[0].exists) {
+        console.log('Task_History table does not exist yet');
+        return res.json({
+          success: true,
+          taskHistory: [],
+          count: 0,
+          message: 'No tasks recorded yet'
+        });
+      }
+    } catch (tableError) {
+      console.error('Error checking Task_History table:', tableError);
     }
     
     // Build query with filters
@@ -365,7 +394,12 @@ app.get('/api/task-history', async (req, res) => {
     query += ` ORDER BY completed_at DESC LIMIT $${paramCount}`;
     params.push(limit);
     
+    console.log('Executing task history query:', query);
+    console.log('With params:', params);
+    
     const result = await client.query(query, params);
+    
+    console.log(`✅ Task history fetched: ${result.rows.length} records`);
     
     res.json({
       success: true,
@@ -373,8 +407,9 @@ app.get('/api/task-history', async (req, res) => {
       count: result.rows.length
     });
   } catch (error) {
-    console.error('Error fetching task history:', error);
-    res.status(500).json({ error: error.message });
+    console.error('❌ Error fetching task history:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: error.message, details: error.stack });
   } finally {
     client.release();
   }
