@@ -12,6 +12,21 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Helper function to generate batch number in IST timezone (UTC+5:30)
+function generateBatchNumber() {
+  // Get current time in IST (UTC + 5:30)
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+  const istDate = new Date(now.getTime() + istOffset);
+  
+  const day = String(istDate.getUTCDate()).padStart(2, '0');
+  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const month = months[istDate.getUTCMonth()];
+  const year = String(istDate.getUTCFullYear()).slice(-2);
+  
+  return `Z${day}${month}${year}`;
+}
+
 // Get local IP address
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
@@ -987,12 +1002,7 @@ app.post('/api/bins/update', async (req, res) => {
         );
       } else {
         // Insert new row with new batch format: Z05NOV25
-        const now = new Date();
-        const day = String(now.getDate()).padStart(2, '0');
-        const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-        const month = months[now.getMonth()];
-        const year = String(now.getFullYear()).slice(-2);
-        const batchNo = `Z${day}${month}${year}`;
+        const batchNo = generateBatchNumber();
         
         await client.query(
           `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom, weight)
@@ -1020,12 +1030,7 @@ app.post('/api/bins/update', async (req, res) => {
         );
       } else {
         // Insert new row with new batch format: Z05NOV25
-        const now = new Date();
-        const day = String(now.getDate()).padStart(2, '0');
-        const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-        const month = months[now.getMonth()];
-        const year = String(now.getFullYear()).slice(-2);
-        const batchNo = `Z${day}${month}${year}`;
+        const batchNo = generateBatchNumber();
         
         await client.query(
           `INSERT INTO inventory (bin_no, sku, batch_no, cfc, uom, qty)
@@ -1724,12 +1729,7 @@ app.post('/api/bins/scan', async (req, res) => {
           );
         } else {
           // Insert new row with new batch format: Z05NOV25
-          const now = new Date();
-          const day = String(now.getDate()).padStart(2, '0');
-          const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-          const month = months[now.getMonth()];
-          const year = String(now.getFullYear()).slice(-2);
-          const batchNo = `Z${day}${month}${year}`;
+          const batchNo = generateBatchNumber();
           
           await client.query(
             `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom)
@@ -1758,12 +1758,7 @@ app.post('/api/bins/scan', async (req, res) => {
           );
         } else {
           // Insert new row with new batch format: Z05NOV25
-          const now = new Date();
-          const day = String(now.getDate()).padStart(2, '0');
-          const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-          const month = months[now.getMonth()];
-          const year = String(now.getFullYear()).slice(-2);
-          const batchNo = `Z${day}${month}${year}`;
+          const batchNo = generateBatchNumber();
           
           await client.query(
             `INSERT INTO inventory (bin_no, sku, batch_no, cfc, uom, qty)
