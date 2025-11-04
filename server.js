@@ -5,6 +5,7 @@ const cors = require('cors');
 const os = require('os');
 const db = require('./database/db');
 const sessions = require('./database/sessions');
+const { autoRestructure } = require('./database/auto-restructure');
 require('dotenv').config();
 
 const app = express();
@@ -1395,6 +1396,9 @@ app.listen(PORT, async () => {
   try {
     await db.query('SELECT NOW()');
     console.log('✅ PostgreSQL database connected successfully');
+    
+    // Auto-restructure database if needed
+    await autoRestructure();
     
     // Initialize sessions table
     await sessions.initSessionsTable();
