@@ -49,6 +49,10 @@ VALID_BINS_REFERENCE.md
 TASK_HISTORY_FLOW.md
 OPERATOR_ID_FORMAT.md
 
+# Local server startup scripts (with local paths)
+start-server.bat
+start-server.ps1
+
 # Deployment check scripts (not needed in deployment)
 check-deployment.bat
 check-operator-ids.js

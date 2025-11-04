@@ -320,11 +320,18 @@ function updateProceedButton() {
         match: selectedQty === requiredQty
     });
     
-    if (selectedQty === requiredQty && selectedQty > 0) {
+    // Allow proceeding if any quantity is selected (even if less than required)
+    if (selectedQty > 0 && selectedQty <= requiredQty) {
         proceedBtn.disabled = false;
         proceedBtn.style.opacity = '1';
         proceedBtn.style.cursor = 'pointer';
-        proceedBtn.style.backgroundColor = '#4CAF50';
+        
+        // Green if exact match, orange if less than required
+        if (selectedQty === requiredQty) {
+            proceedBtn.style.backgroundColor = '#4CAF50'; // Green - exact match
+        } else {
+            proceedBtn.style.backgroundColor = '#FF9800'; // Orange - partial quantity
+        }
     } else {
         proceedBtn.disabled = true;
         proceedBtn.style.opacity = '0.5';
@@ -344,15 +351,37 @@ function initStep2Outgoing() {
     
     const proceedBtn = document.getElementById('proceed-to-dispatch');
     proceedBtn.addEventListener('click', () => {
-        if (totalSelectedCFC === outgoingData.quantity) {
-            // Update fifoBins with selected quantities
+        const requiredQty = outgoingData.quantity;
+        const selectedQty = totalSelectedCFC;
+        
+        if (selectedQty === requiredQty) {
+            // Exact match - proceed directly
             fifoBins = fifoBins.filter(bin => selectedBins.has(bin.id)).map(bin => ({
                 ...bin,
                 toDispatch: selectedBins.get(bin.id)
             }));
             goToStep3Outgoing();
+        } else if (selectedQty < requiredQty && selectedQty > 0) {
+            // Partial quantity - show confirmation
+            const shortage = requiredQty - selectedQty;
+            const confirmMsg = `⚠️ PARTIAL DISPATCH\n\n` +
+                `Required: ${requiredQty} cartons\n` +
+                `Available: ${selectedQty} cartons\n` +
+                `Shortage: ${shortage} cartons\n\n` +
+                `Do you want to proceed with ${selectedQty} cartons only?`;
+            
+            if (confirm(confirmMsg)) {
+                // Update outgoingData.quantity to actual selected quantity
+                outgoingData.quantity = selectedQty;
+                
+                fifoBins = fifoBins.filter(bin => selectedBins.has(bin.id)).map(bin => ({
+                    ...bin,
+                    toDispatch: selectedBins.get(bin.id)
+                }));
+                goToStep3Outgoing();
+            }
         } else {
-            alert(`Please select exactly ${outgoingData.quantity} cartons. Currently selected: ${totalSelectedCFC} cartons`);
+            alert(`Please select at least 1 carton. Currently selected: ${selectedQty} cartons`);
         }
     });
     
