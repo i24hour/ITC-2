@@ -181,7 +181,10 @@ app.post('/api/auth/signup', async (req, res) => {
     const sessionResult = await sessions.createSession(email, name, operatorId);
     
     if (!sessionResult.success) {
-      return res.status(500).json({ error: 'Failed to create session' });
+      console.error('Failed to create session during signup:', sessionResult.error);
+      return res.status(500).json({ 
+        error: 'Failed to create session: ' + sessionResult.error 
+      });
     }
     
     res.json({
