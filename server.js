@@ -218,6 +218,134 @@ app.post('/api/admin/update-inventory-weight', async (req, res) => {
   }
 });
 
+// Admin endpoint: Migrate to new database structure
+app.post('/api/admin/migrate-structure', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    console.log('🔄 Starting database structure migration...');
+    
+    const results = {
+      cleanedFGMaster: 0,
+      inventoryCreated: false,
+      dataMigrated: 0,
+      nonEmptyBins: 0
+    };
+    
+    // Step 1: Create Cleaned_FG_Master_file with hardcoded SKUs (no Excel needed on server)
+    console.log('📋 Creating Cleaned_FG_Master_file...');
+    await client.query('DROP TABLE IF EXISTS "Cleaned_FG_Master_file" CASCADE');
+    await client.query(`
+      CREATE TABLE "Cleaned_FG_Master_file" (
+        sku VARCHAR(50) PRIMARY KEY,
+        description TEXT NOT NULL,
+        uom DECIMAL(10,3) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Hardcoded essential SKUs (you can add more later)
+    const essentialSKUs = [
+      { sku: '210001', description: 'BINGO TEDHE MEDHE 60G', uom: 10.5 },
+      { sku: '210002', description: 'BINGO YUMITOS PARTY MIX 26G', uom: 12.0 },
+      { sku: '210003', description: 'BINGO MAD ANGLES 72.5G', uom: 9.5 },
+      // Add more as needed
+    ];
+    
+    for (const { sku, description, uom } of essentialSKUs) {
+      await client.query(
+        `INSERT INTO "Cleaned_FG_Master_file" (sku, description, uom) 
+         VALUES ($1, $2, $3) 
+         ON CONFLICT (sku) DO NOTHING`,
+        [sku, description, uom]
+      );
+    }
+    results.cleanedFGMaster = essentialSKUs.length;
+    
+    // Step 2: Create new Inventory table (capitalized)
+    console.log('📦 Creating new Inventory table...');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "Inventory" (
+        id SERIAL PRIMARY KEY,
+        bin_no VARCHAR(10) NOT NULL,
+        sku VARCHAR(50) NOT NULL,
+        batch_no VARCHAR(20) NOT NULL,
+        cfc INTEGER NOT NULL DEFAULT 0,
+        description TEXT,
+        uom DECIMAL(10,3),
+        weight DECIMAL(10,2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(bin_no, sku)
+      )
+    `);
+    results.inventoryCreated = true;
+    
+    // Step 3: Migrate data from old inventory table to new Inventory table
+    console.log('🔄 Migrating data from old inventory table...');
+    const checkOldTable = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'inventory'
+      )
+    `);
+    
+    if (checkOldTable.rows[0].exists) {
+      const oldData = await client.query(`SELECT * FROM inventory`);
+      console.log(`   Found ${oldData.rows.length} records in old inventory table`);
+      
+      for (const row of oldData.rows) {
+        try {
+          await client.query(`
+            INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom, weight, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (bin_no, sku) DO UPDATE SET
+              cfc = EXCLUDED.cfc,
+              batch_no = EXCLUDED.batch_no,
+              description = EXCLUDED.description,
+              uom = EXCLUDED.uom,
+              weight = EXCLUDED.weight,
+              updated_at = EXCLUDED.updated_at
+          `, [
+            row.bin_no,
+            row.sku,
+            row.batch_no || 'Z01JAN25',
+            row.cfc || 0,
+            row.description,
+            row.uom,
+            row.weight,
+            row.created_at || new Date(),
+            row.updated_at || new Date()
+          ]);
+          results.dataMigrated++;
+        } catch (err) {
+          console.log(`   Warning: Could not migrate row for bin ${row.bin_no}, SKU ${row.sku}`);
+        }
+      }
+    }
+    
+    // Step 4: Count non-empty bins
+    const nonEmptyResult = await client.query(`SELECT COUNT(*) as count FROM "Inventory" WHERE cfc > 0`);
+    results.nonEmptyBins = parseInt(nonEmptyResult.rows[0].count);
+    
+    console.log('✅ Migration complete:', results);
+    
+    res.json({
+      success: true,
+      message: 'Database structure migration completed successfully',
+      results: results
+    });
+    
+  } catch (error) {
+    console.error('❌ Migration failed:', error);
+    res.status(500).json({ 
+      error: error.message,
+      stack: error.stack 
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== AUTHENTICATION API ENDPOINTS ====================
 
 // Login endpoint - creates server-side session
