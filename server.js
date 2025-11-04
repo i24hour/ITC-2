@@ -187,6 +187,22 @@ app.post('/api/admin/create-essential-tables', async (req, res) => {
   }
 });
 
+// Update Inventory structure - add weight column and remove Bin_Inventory (ADMIN ONLY)
+app.post('/api/admin/update-inventory-weight', async (req, res) => {
+  try {
+    console.log('🔧 Updating Inventory table structure...');
+    const { updateInventoryStructure } = require('./database/update-inventory-weight');
+    await updateInventoryStructure();
+    res.json({ 
+      success: true, 
+      message: 'Inventory table updated with weight column. Bin_Inventory table dropped.' 
+    });
+  } catch (error) {
+    console.error('❌ Inventory structure update failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== AUTHENTICATION API ENDPOINTS ====================
 
 // Login endpoint - creates server-side session
@@ -970,12 +986,18 @@ app.post('/api/bins/update', async (req, res) => {
           [newCFC, binId, sku]
         );
       } else {
-        // Insert new row
-        const batchNo = 'NEW' + new Date().toISOString().slice(2, 10).replace(/-/g, '');
+        // Insert new row with new batch format: Z05NOV25
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, '0');
+        const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+        const month = months[now.getMonth()];
+        const year = String(now.getFullYear()).slice(-2);
+        const batchNo = `Z${day}${month}${year}`;
+        
         await client.query(
-          `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [binId, sku, batchNo, newCFC, description, uom]
+          `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom, weight)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [binId, sku, batchNo, newCFC, description, uom, weight]
         );
       }
     } else {
@@ -997,8 +1019,14 @@ app.post('/api/bins/update', async (req, res) => {
           [newCFC, newCFC * uom, uom, binId, sku]
         );
       } else {
-        // Insert new row
-        const batchNo = 'NEW' + new Date().toISOString().slice(2, 10).replace(/-/g, '');
+        // Insert new row with new batch format: Z05NOV25
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, '0');
+        const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+        const month = months[now.getMonth()];
+        const year = String(now.getFullYear()).slice(-2);
+        const batchNo = `Z${day}${month}${year}`;
+        
         await client.query(
           `INSERT INTO inventory (bin_no, sku, batch_no, cfc, uom, qty)
            VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -1695,8 +1723,14 @@ app.post('/api/bins/scan', async (req, res) => {
             [newCFC, binId, task.sku]
           );
         } else {
-          // Insert new row
-          const batchNo = 'NEW' + new Date().toISOString().slice(2, 10).replace(/-/g, '');
+          // Insert new row with new batch format: Z05NOV25
+          const now = new Date();
+          const day = String(now.getDate()).padStart(2, '0');
+          const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+          const month = months[now.getMonth()];
+          const year = String(now.getFullYear()).slice(-2);
+          const batchNo = `Z${day}${month}${year}`;
+          
           await client.query(
             `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom)
              VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -1723,8 +1757,14 @@ app.post('/api/bins/scan', async (req, res) => {
             [newCFC, newCFC * existingUom, binId, task.sku]
           );
         } else {
-          // Insert new row
-          const batchNo = 'NEW' + new Date().toISOString().slice(2, 10).replace(/-/g, '');
+          // Insert new row with new batch format: Z05NOV25
+          const now = new Date();
+          const day = String(now.getDate()).padStart(2, '0');
+          const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+          const month = months[now.getMonth()];
+          const year = String(now.getFullYear()).slice(-2);
+          const batchNo = `Z${day}${month}${year}`;
+          
           await client.query(
             `INSERT INTO inventory (bin_no, sku, batch_no, cfc, uom, qty)
              VALUES ($1, $2, $3, $4, $5, $6)`,

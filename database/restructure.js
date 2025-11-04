@@ -89,13 +89,14 @@ async function restructure() {
                 cfc INTEGER DEFAULT 0,
                 description TEXT NOT NULL,
                 uom DECIMAL(10,3) NOT NULL,
+                weight DECIMAL(10,2),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (sku) REFERENCES "Cleaned_FG_Master_file"(sku),
                 FOREIGN KEY (bin_no) REFERENCES "Bins"(bin_no)
             )
         `);
-        console.log('✅ Inventory table created (empty - CFC = 0 for all)');
+        console.log('✅ Inventory table created with weight column (empty - CFC = 0 for all)');
         
         // ==================== TABLE 3: Incoming ====================
         console.log('\n📥 Creating Incoming table...');
