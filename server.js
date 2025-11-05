@@ -2248,18 +2248,41 @@ app.get('/api/reports', async (req, res) => {
     
     if (type === 'outgoing' || type === 'all') {
       try {
+        // Build date filter for outgoing table
+        let outgoingDateFilter = '';
+        if (dateRange) {
+          switch(dateRange) {
+            case 'today':
+              outgoingDateFilter = `AND DATE(outgoing_date) = CURRENT_DATE`;
+              break;
+            case 'week':
+              const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+              outgoingDateFilter = `AND outgoing_date >= '${weekAgo.toISOString()}'`;
+              break;
+            case 'month':
+              const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+              outgoingDateFilter = `AND outgoing_date >= '${monthAgo.toISOString()}'`;
+              break;
+            default:
+              outgoingDateFilter = '';
+          }
+        }
+        
         const outgoingQuery = `
           SELECT id, sku, batch_no, quantity, bin_no, operator_id, 
                  outgoing_date, description, weight
           FROM "Outgoing"
-          WHERE 1=1 ${dateFilter.replace('incoming_date', 'outgoing_date')}
+          WHERE 1=1 ${outgoingDateFilter}
           ORDER BY outgoing_date DESC
           LIMIT 100
         `;
+        console.log('Fetching outgoing data with query:', outgoingQuery);
         const outgoingResult = await client.query(outgoingQuery);
+        console.log('Outgoing data fetched:', outgoingResult.rows.length, 'rows');
         data.outgoing = outgoingResult.rows;
       } catch (err) {
         console.error('Error fetching outgoing data:', err.message);
+        console.error('Error stack:', err.stack);
         data.outgoing = [];
       }
     }
