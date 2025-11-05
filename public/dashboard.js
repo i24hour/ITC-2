@@ -72,6 +72,7 @@ async function loadTaskHistory() {
     }
     
     console.log('✅ Session token found, loading task history...');
+    console.log('✅ Filtering by operator ID:', user.operatorId);
     
     try {
         historyList.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">Loading task history...</p>';
@@ -81,6 +82,11 @@ async function loadTaskHistory() {
             sessionToken: sessionToken,
             limit: '50'
         });
+        
+        // Filter by logged-in operator's ID
+        if (user.operatorId) {
+            params.append('operatorId', user.operatorId);
+        }
         
         if (taskType) {
             params.append('taskType', taskType);
