@@ -2205,6 +2205,12 @@ app.get('/api/reports', async (req, res) => {
   try {
     const { type, dateRange } = req.query;
     
+    // Debug logging
+    console.log('=== REPORTS API CALLED ===');
+    console.log('Report Type:', type);
+    console.log('Date Range:', dateRange);
+    console.log('Query params:', req.query);
+    
     // Calculate date filter based on range
     let dateFilter = '';
     const now = new Date();
@@ -2300,6 +2306,13 @@ app.get('/api/reports', async (req, res) => {
         data.inventory = [];
       }
     }
+    
+    // Final logging before sending response
+    console.log('=== REPORTS API RESPONSE ===');
+    console.log('Data keys:', Object.keys(data));
+    console.log('Incoming count:', data.incoming?.length || 0);
+    console.log('Outgoing count:', data.outgoing?.length || 0);
+    console.log('Inventory count:', data.inventory?.length || 0);
     
     res.json({ success: true, data });
     
