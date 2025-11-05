@@ -21,7 +21,7 @@
     <div class="container supervisor-container">
         <header class="page-header">
             <h1>👨‍💼 Supervisor Control Panel</h1>
-            <p class="page-subtitle">Manage SKUs and monitor operator activities</p>
+            <p class="page-subtitle">Manage SKUs for Incoming and Outgoing operations</p>
         </header>
 
         <!-- SKU Management Section -->
@@ -51,139 +51,6 @@
                 <div class="active-sku-summary">
                     <h4>Active SKUs: <span id="active-sku-count">0</span> / <span id="total-sku-count">0</span></h4>
                 </div>
-            </div>
-        </div>
-
-        <!-- Operator Activity Monitoring -->
-        <div class="supervisor-section">
-            <div class="section-header">
-                <h2>👥 Operator Activity Monitor</h2>
-                <p>View and manage all ongoing and completed tasks</p>
-            </div>
-
-            <div class="activity-tabs">
-                <button class="tab-btn active" data-tab="ongoing">⏳ Ongoing Tasks</button>
-                <button class="tab-btn" data-tab="completed">✅ Completed Tasks</button>
-                <button class="tab-btn" data-tab="cancelled">❌ Cancelled Tasks</button>
-            </div>
-
-            <!-- Ongoing Tasks -->
-            <div class="tab-content active" id="ongoing-tab">
-                <div class="tasks-table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Task ID</th>
-                                <th>Operator</th>
-                                <th>Type</th>
-                                <th>SKU</th>
-                                <th>Quantity</th>
-                                <th>Start Time</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="ongoing-tasks-body">
-                            <!-- Tasks loaded dynamically -->
-                        </tbody>
-                    </table>
-                    <div id="no-ongoing-tasks" class="empty-state" style="display: none;">
-                        <p>No ongoing tasks</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Completed Tasks -->
-            <div class="tab-content" id="completed-tab">
-                <div class="tasks-table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Task ID</th>
-                                <th>Operator</th>
-                                <th>Type</th>
-                                <th>SKU</th>
-                                <th>Quantity</th>
-                                <th>Start Time</th>
-                                <th>End Time</th>
-                                <th>Duration</th>
-                            </tr>
-                        </thead>
-                        <tbody id="completed-tasks-body">
-                            <!-- Tasks loaded dynamically -->
-                        </tbody>
-                    </table>
-                    <div id="no-completed-tasks" class="empty-state" style="display: none;">
-                        <p>No completed tasks</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Cancelled Tasks -->
-            <div class="tab-content" id="cancelled-tab">
-                <div class="tasks-table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Task ID</th>
-                                <th>Operator</th>
-                                <th>Type</th>
-                                <th>SKU</th>
-                                <th>Reason</th>
-                                <th>Cancelled By</th>
-                                <th>Cancelled At</th>
-                            </tr>
-                        </thead>
-                        <tbody id="cancelled-tasks-body">
-                            <!-- Tasks loaded dynamically -->
-                        </tbody>
-                    </table>
-                    <div id="no-cancelled-tasks" class="empty-state" style="display: none;">
-                        <p>No cancelled tasks</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Statistics -->
-        <div class="supervisor-section">
-            <div class="section-header">
-                <h2>📊 Real-Time Statistics</h2>
-            </div>
-            <div class="stats-grid supervisor-stats">
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-active-operators">0</div>
-                    <div class="stat-label">Active Operators</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-ongoing-tasks">0</div>
-                    <div class="stat-label">Ongoing Tasks</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-completed-today">0</div>
-                    <div class="stat-label">Completed Today</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-active-skus">0</div>
-                    <div class="stat-label">Active SKUs</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Cancel Task Modal -->
-    <div id="cancel-modal" class="modal">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2>Cancel Task</h2>
-            <p>Are you sure you want to cancel this task?</p>
-            <div class="form-group">
-                <label for="cancel-reason">Reason for Cancellation</label>
-                <textarea id="cancel-reason" rows="3" placeholder="Enter reason..." required></textarea>
-            </div>
-            <div class="modal-actions">
-                <button class="btn btn-secondary" id="cancel-modal-close">No, Keep Task</button>
-                <button class="btn btn-danger" id="confirm-cancel-task">Yes, Cancel Task</button>
             </div>
         </div>
     </div>
