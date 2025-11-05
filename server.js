@@ -1944,6 +1944,8 @@ app.post('/api/bins/scan', async (req, res) => {
       const currentRow = invRes.rows[0];
       const currentCFC = currentRow.cfc;
       const uom = currentRow.uom;
+      const batchNo = currentRow.batch_no;
+      const description = currentRow.description;
 
       if (currentCFC < qtyToProcess) {
         await client.query('ROLLBACK');
@@ -1965,6 +1967,13 @@ app.post('/api/bins/scan', async (req, res) => {
           [newCFC, newQTY, binId, task.sku]
         );
       }
+
+      // Insert into Outgoing table to record the dispatch
+      await client.query(
+        `INSERT INTO "Outgoing" (sku, batch_no, description, quantity, weight, uom, bin_no, operator_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [task.sku, batchNo, description, qtyToProcess, task.weight || null, uom, binId, sessionValidation.session.operator_id || null]
+      );
 
       // Log transaction
       await client.query(
