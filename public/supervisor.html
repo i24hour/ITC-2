@@ -53,8 +53,39 @@
                 </div>
             </div>
         </div>
+
+        <!-- Operator Management Section -->
+        <div class="supervisor-section">
+            <div class="section-header">
+                <h2>👥 Operator Management</h2>
+                <p>Create new operator accounts</p>
+            </div>
+
+            <div class="sku-management-card">
+                <h3>Create New Operator Account</h3>
+                <form id="create-operator-form" style="max-width: 600px; margin: 20px 0;">
+                    <div class="form-group">
+                        <label for="operator-name">Full Name</label>
+                        <input type="text" id="operator-name" placeholder="Enter operator's full name" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="operator-email">Email Address</label>
+                        <input type="email" id="operator-email" placeholder="Enter operator's email" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="operator-password">Password</label>
+                        <input type="password" id="operator-password" placeholder="Create password for operator" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="operator-confirm-password">Confirm Password</label>
+                        <input type="password" id="operator-confirm-password" placeholder="Confirm password" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <button type="submit" class="btn btn-success" style="margin-top: 20px;">✅ Create Operator Account</button>
+                </form>
+            </div>
+        </div>
     </div>
 
-    <script src="supervisor.js"></script>
+    <script src="supervisor.js?v=20241105-operator-signup"></script>
 </body>
 </html>

@@ -34,6 +34,56 @@ async function initSupervisorPanel() {
     
     // Setup event listeners
     setupSKUManagement();
+    setupOperatorCreation();
+}
+
+function setupOperatorCreation() {
+    const form = document.getElementById('create-operator-form');
+    
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const name = document.getElementById('operator-name').value.trim();
+        const email = document.getElementById('operator-email').value.trim();
+        const password = document.getElementById('operator-password').value;
+        const confirmPassword = document.getElementById('operator-confirm-password').value;
+        
+        // Validation
+        if (!name || !email || !password) {
+            alert('❌ Please fill in all fields');
+            return;
+        }
+        
+        if (password !== confirmPassword) {
+            alert('❌ Passwords do not match');
+            return;
+        }
+        
+        if (password.length < 6) {
+            alert('❌ Password must be at least 6 characters');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/supervisor/create-operator', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, password })
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok && result.success) {
+                alert(`✅ Operator account created successfully!\n\nOperator ID: ${result.operatorId}\nEmail: ${email}\n\nThe operator can now login with these credentials.`);
+                form.reset();
+            } else {
+                alert('❌ Error: ' + (result.error || 'Failed to create operator account'));
+            }
+        } catch (error) {
+            console.error('Error creating operator:', error);
+            alert('❌ Error creating operator account. Please try again.');
+        }
+    });
 }
 
 // ===== SKU MANAGEMENT =====

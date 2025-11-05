@@ -1572,6 +1572,68 @@ app.post('/api/supervisor/active-skus', async (req, res) => {
   }
 });
 
+// Supervisor endpoint to create operator accounts
+app.post('/api/supervisor/create-operator', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { name, email, password } = req.body;
+    
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required' });
+    }
+    
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    
+    await client.query('BEGIN');
+    
+    // Check if email already exists (prevent duplicate accounts)
+    const existingCheck = await client.query(
+      `SELECT operator_id, role FROM "Operators" WHERE email = $1`,
+      [email]
+    );
+    
+    if (existingCheck.rows.length > 0) {
+      await client.query('ROLLBACK');
+      const existingRole = existingCheck.rows[0].role;
+      return res.status(400).json({ 
+        error: `This email is already registered as ${existingRole}. Cannot create duplicate account.`
+      });
+    }
+    
+    // Get the next operator ID
+    const countResult = await client.query(
+      `SELECT COUNT(*) as count FROM "Operators" WHERE role = 'operator'`
+    );
+    const nextNumber = parseInt(countResult.rows[0].count) + 1;
+    const operatorId = `OP${String(nextNumber).padStart(3, '0')}`; // OP001, OP002, etc.
+    
+    // Insert new operator (only operators, not supervisors)
+    await client.query(
+      `INSERT INTO "Operators" (operator_id, name, email, password_hash, role, created_at)
+       VALUES ($1, $2, $3, $4, 'operator', CURRENT_TIMESTAMP)`,
+      [operatorId, name, email, password] // In production, hash the password
+    );
+    
+    await client.query('COMMIT');
+    
+    res.json({
+      success: true,
+      message: 'Operator account created successfully',
+      operatorId: operatorId,
+      email: email,
+      name: name
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error creating operator:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 // Get all tasks
 app.get('/api/supervisor/tasks', async (req, res) => {
   try {
