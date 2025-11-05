@@ -1778,15 +1778,16 @@ app.post('/api/tasks/create', async (req, res) => {
     // Ensure tasks table has session_token column (backwards-compatible)
     try {
       await db.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS session_token VARCHAR(255)`);
+      await db.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS reserved_qty INTEGER DEFAULT 0`);
     } catch (err) {
-      console.warn('Could not add session_token column (may already exist):', err.message);
+      console.warn('Could not add columns (may already exist):', err.message);
     }
 
     const result = await db.query(
-      `INSERT INTO tasks (operator, sku, bin_no, quantity, task_type, status, session_token)
-       VALUES ($1, $2, $3, $4, $5, 'ongoing', $6)
+      `INSERT INTO tasks (operator, sku, bin_no, quantity, reserved_qty, task_type, status, session_token)
+       VALUES ($1, $2, $3, $4, $5, $6, 'ongoing', $7)
        RETURNING *`,
-      [operator, sku, binNo, parseInt(quantity), type, sessionToken || null]
+      [operator, sku, binNo, parseInt(quantity), parseInt(quantity), type, sessionToken || null]
     );
     
     res.json({
@@ -2142,6 +2143,58 @@ app.post('/api/bins/scan', async (req, res) => {
     }
 
     const task = taskResult.rows[0];
+
+    // Check if task is cancelled or expired
+    if (task.status === 'cancelled') {
+      return res.status(400).json({ 
+        error: 'Task has been cancelled',
+        message: 'This task was cancelled due to timeout or manual cancellation. Please return to dashboard.',
+        cancelled: true
+      });
+    }
+    
+    // Check if task has expired (more than 1 minute old)
+    const taskAge = Date.now() - new Date(task.created_at).getTime();
+    const timeoutMs = 1 * 60 * 1000; // 1 minute in milliseconds
+    
+    if (taskAge > timeoutMs) {
+      // Auto-cancel this expired task
+      await client.query(
+        `UPDATE tasks 
+         SET status = 'cancelled', 
+             cancelled_at = CURRENT_TIMESTAMP,
+             cancellation_reason = 'Auto-cancelled: Task expired before completion'
+         WHERE id = $1`,
+        [task.id]
+      );
+      
+      // Add to Task_History
+      await client.query(
+        `INSERT INTO "Task_History" (
+          task_id, operator, sku, task_type, status, 
+          bins_involved, total_quantity, cancelled_reason,
+          created_at, cancelled_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
+        [
+          task.id,
+          task.operator,
+          task.sku,
+          task.task_type,
+          'cancelled',
+          task.bin_no || 'N/A',
+          task.reserved_qty || 0,
+          'Auto-cancelled: Task expired before completion',
+          task.created_at
+        ]
+      );
+      
+      return res.status(400).json({ 
+        error: 'Task has expired',
+        message: 'This task has expired. The 1-minute timer ran out. Please return to dashboard.',
+        expired: true,
+        cancelled: true
+      });
+    }
 
     // Normalize task type (DB column is `task_type`; older code may expect `type`)
     const taskType = task.task_type || task.type || taskType;

@@ -369,6 +369,9 @@ function startTaskTimer(createdAt) {
         clearInterval(timerInterval);
     }
     
+    // Start periodic status check
+    startTaskStatusCheck();
+    
     timerInterval = setInterval(() => {
         const now = Date.now();
         const remaining = endTime - now;
@@ -395,6 +398,29 @@ function startTaskTimer(createdAt) {
             timerDisplay.style.color = '#f0ad4e'; // Orange
         }
     }, 1000);
+}
+
+// Periodic check if task is still valid (every 10 seconds)
+let statusCheckInterval = null;
+
+function startTaskStatusCheck() {
+    if (!currentTaskId) return;
+    
+    statusCheckInterval = setInterval(async () => {
+        try {
+            const response = await fetch(`/api/tasks/check/${currentTaskId}`);
+            const data = await response.json();
+            
+            if (data.isCancelled || data.task?.status === 'cancelled') {
+                clearInterval(statusCheckInterval);
+                clearInterval(timerInterval);
+                alert('⏰ Your task has been cancelled due to timeout. The selected bins are now available for other operators.');
+                window.location.href = 'dashboard.html';
+            }
+        } catch (error) {
+            console.error('Error checking task status:', error);
+        }
+    }, 10000); // Check every 10 seconds
 }
 
 async function autoCancelTask() {
