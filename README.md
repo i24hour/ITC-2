@@ -1,5 +1,7 @@
 # 📦 SKU Inventory Management System
 
+🌐 **Live Application**: [https://itc-warehouse-app-2025-c8hgg5deeagae5dj.centralindia-01.azurewebsites.net/index.html](https://itc-warehouse-app-2025-c8hgg5deeagae5dj.centralindia-01.azurewebsites.net/index.html)
+
 A web-based inventory management system with QR code scanning functionality for managing SKU bin assignments.
 
 ## Features
@@ -27,20 +29,20 @@ npm install
 npm start
 ```
 
-The server will display:
-- **Local URL**: `http://localhost:3000` (for computer browser)
-- **Network URL**: `http://YOUR_IP:3000` (for accessing from phone)
+The server will display your network URL for accessing from different devices.
 
 ## How to Use
 
 ### 1. Search for Bins
-1. Open `http://localhost:3000` on your computer
+
+1. Open the application URL
 2. Select a SKU from the dropdown
 3. Enter a minimum value (e.g., 10)
 4. Click "Search Bins"
 5. View all bins that have MORE than the specified value
 
 ### 2. Generate QR Code
+
 1. Click on any bin card from the search results
 2. A modal will open showing:
    - Bin information
@@ -48,6 +50,7 @@ The server will display:
    - "Waiting for scan..." message
 
 ### 3. Scan with Phone
+
 1. Open your phone's camera or QR scanner app
 2. Scan the QR code displayed on your computer
 3. Your phone will automatically:
@@ -57,6 +60,7 @@ The server will display:
    - Show success confirmation
 
 ### 4. Computer Auto-Detection
+
 - While you're scanning with your phone, your computer is polling every 2 seconds
 - When the scan completes, your computer screen will automatically show:
   - ✅ Success message
@@ -64,6 +68,7 @@ The server will display:
   - "Return to Home" button
 
 ### 5. Return to Home
+
 - Click "Return to Home" on your computer
 - The form resets and you're ready for the next operation
 
@@ -99,11 +104,13 @@ The server will display:
 ## Troubleshooting
 
 ### QR Code doesn't work on phone
+
 - Ensure both devices are on the same WiFi network
 - Check the Network URL shown in the terminal matches your computer's IP
 - Try accessing the Network URL directly in your phone's browser
 
 ### Computer doesn't detect scan
+
 - The polling checks every 2 seconds - be patient
 - Check that the CSV file is being updated
 - Ensure no errors in the browser console (F12)
