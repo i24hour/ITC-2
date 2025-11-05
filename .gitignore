@@ -58,6 +58,8 @@ check-deployment.bat
 check-operator-ids.js
 check-database-status.js
 check-inventory-data.js
+check-outgoing-table.js
+check-all-tables.js
 export-all-database.js
 test-db.js
 generate-all-bin-qrcodes.js
