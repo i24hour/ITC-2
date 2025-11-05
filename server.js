@@ -986,19 +986,35 @@ app.get('/api/inventory', async (req, res) => {
 
 // Get all available SKUs
 app.get('/api/sku-list', async (req, res) => {
+  const client = await db.getClient();
   try {
-    // Try new table first, fallback to old table if it doesn't exist
-    let result;
-    try {
-      result = await db.query(
-        `SELECT sku FROM "Cleaned_FG_Master_file" ORDER BY sku`
+    // Check if active_skus table exists
+    const tableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'active_skus'
       );
-    } catch (err) {
-      // Fallback to old table structure if new table doesn't exist
-      console.log('Cleaned_FG_Master_file not found, using active_skus');
-      result = await db.query(
+    `);
+    
+    let result;
+    
+    if (tableCheck.rows[0].exists) {
+      // Use active_skus table to filter
+      result = await client.query(
         `SELECT sku FROM active_skus WHERE is_active = true ORDER BY sku`
       );
+      console.log(`✅ Returned ${result.rows.length} active SKUs from active_skus table`);
+    } else {
+      // Fallback to all SKUs from master file if active_skus doesn't exist
+      try {
+        result = await client.query(
+          `SELECT DISTINCT sku FROM "Cleaned_FG_Master_file" ORDER BY sku`
+        );
+        console.log(`⚠️ active_skus table not found, returned all ${result.rows.length} SKUs from master file`);
+      } catch (err) {
+        console.error('Error fetching SKUs:', err);
+        return res.status(500).json({ error: 'No SKU source available' });
+      }
     }
     
     const skus = result.rows.map(row => row.sku);
@@ -1006,6 +1022,8 @@ app.get('/api/sku-list', async (req, res) => {
   } catch (error) {
     console.error('Error fetching SKU list:', error);
     res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
   }
 });
 
