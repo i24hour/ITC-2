@@ -1865,6 +1865,19 @@ app.post('/api/tasks/cancel', async (req, res) => {
     
     await client.query('BEGIN');
     
+    // Get task details before cancellation
+    const taskDetails = await client.query(
+      `SELECT * FROM tasks WHERE id = $1 AND status = 'ongoing'`,
+      [taskId]
+    );
+    
+    if (taskDetails.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Task not found or already completed/cancelled' });
+    }
+    
+    const task = taskDetails.rows[0];
+    
     // Update task status to cancelled
     const result = await client.query(
       `UPDATE tasks 
@@ -1876,10 +1889,25 @@ app.post('/api/tasks/cancel', async (req, res) => {
       [taskId, reason || 'Cancelled by user']
     );
     
-    if (result.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Task not found or already completed/cancelled' });
-    }
+    // Add to Task_History as incomplete/cancelled task
+    await client.query(
+      `INSERT INTO "Task_History" (
+        task_id, operator, sku, task_type, status, 
+        bins_involved, total_quantity, cancelled_reason,
+        created_at, cancelled_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
+      [
+        task.id,
+        task.operator,
+        task.sku,
+        task.task_type,
+        'cancelled',
+        task.bin_no || 'N/A',
+        task.reserved_qty || 0,
+        reason || 'Cancelled by user',
+        task.created_at
+      ]
+    );
     
     await client.query('COMMIT');
     
@@ -1901,6 +1929,21 @@ app.post('/api/tasks/cancel', async (req, res) => {
 async function autoCancelExpiredTasks() {
   const client = await db.getClient();
   try {
+    await client.query('BEGIN');
+    
+    // Get expired tasks before cancelling
+    const expiredTasks = await client.query(`
+      SELECT * FROM tasks
+      WHERE status = 'ongoing'
+      AND created_at < NOW() - INTERVAL '1 minute'
+    `);
+    
+    if (expiredTasks.rows.length === 0) {
+      await client.query('COMMIT');
+      return;
+    }
+    
+    // Cancel expired tasks
     const result = await client.query(`
       UPDATE tasks 
       SET status = 'cancelled',
@@ -1910,6 +1953,30 @@ async function autoCancelExpiredTasks() {
       AND created_at < NOW() - INTERVAL '1 minute'
       RETURNING id, operator, sku
     `);
+    
+    // Add each cancelled task to Task_History
+    for (const task of expiredTasks.rows) {
+      await client.query(
+        `INSERT INTO "Task_History" (
+          task_id, operator, sku, task_type, status, 
+          bins_involved, total_quantity, cancelled_reason,
+          created_at, cancelled_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
+        [
+          task.id,
+          task.operator,
+          task.sku,
+          task.task_type,
+          'cancelled',
+          task.bin_no || 'N/A',
+          task.reserved_qty || 0,
+          'Auto-cancelled: 1-minute timeout exceeded (testing)',
+          task.created_at
+        ]
+      );
+    }
+    
+    await client.query('COMMIT');
     
     if (result.rows.length > 0) {
       console.log(`✅ Auto-cancelled ${result.rows.length} expired tasks:`, result.rows);
