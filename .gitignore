@@ -60,13 +60,17 @@ check-database-status.js
 check-inventory-data.js
 check-outgoing-table.js
 check-all-tables.js
+check-active-skus.js
+create-active-skus-table.js
 export-all-database.js
 test-db.js
 generate-all-bin-qrcodes.js
 generate-bin-qrcodes.js
 
-# Deployment scripts (Azure handles deployment via GitHub Actions)
+# Deployment and commit helper scripts
 deploy-to-azure.ps1
+commit-changes.bat
+push-to-github.ps1
 startup.sh
 .deployment-ignore
 host.json
