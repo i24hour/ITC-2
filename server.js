@@ -1471,17 +1471,46 @@ app.get('/api/reports/activity', async (req, res) => {
 
 // Get active SKU list
 app.get('/api/supervisor/active-skus', async (req, res) => {
+  const client = await db.getClient();
   try {
-    const allResult = await db.query(`SELECT sku FROM active_skus ORDER BY sku`);
-    const activeResult = await db.query(`SELECT sku FROM active_skus WHERE is_active = true ORDER BY sku`);
+    // Check if active_skus table exists
+    const tableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'active_skus'
+      );
+    `);
+    
+    if (!tableCheck.rows[0].exists) {
+      // If table doesn't exist, create it and populate from Cleaned_FG_Master_file
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS active_skus (
+          sku VARCHAR(50) PRIMARY KEY,
+          is_active BOOLEAN DEFAULT true
+        );
+      `);
+      
+      // Populate with all SKUs from master file
+      await client.query(`
+        INSERT INTO active_skus (sku, is_active)
+        SELECT DISTINCT sku, true
+        FROM "Cleaned_FG_Master_file"
+        ON CONFLICT (sku) DO NOTHING;
+      `);
+    }
+    
+    const allResult = await client.query(`SELECT sku FROM active_skus ORDER BY sku`);
+    const activeResult = await client.query(`SELECT sku FROM active_skus WHERE is_active = true ORDER BY sku`);
     
     res.json({
       allSKUs: allResult.rows.map(row => row.sku),
-      activeSKUs: activeResult.rows.map(row => row.sku)
+      activeSkus: activeResult.rows.map(row => row.sku)
     });
   } catch (error) {
     console.error('Error fetching active SKUs:', error);
     res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
   }
 });
 
