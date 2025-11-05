@@ -19,6 +19,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ email, password, name: email.split('@')[0] })
             });
 
+            // Handle server errors (502, 500, etc.)
+            if (!response.ok) {
+                if (response.status === 502) {
+                    alert('⚠️ Server is temporarily unavailable (Bad Gateway). The server may be restarting after deployment. Please wait 30 seconds and try again.');
+                } else if (response.status === 500) {
+                    alert('⚠️ Server error occurred. Please try again in a moment.');
+                } else {
+                    alert(`⚠️ Server returned error: ${response.status} ${response.statusText}`);
+                }
+                return;
+            }
+
             const result = await response.json();
 
             if (result.success) {
@@ -42,11 +54,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Redirect to dashboard
                 window.location.href = 'dashboard.html';
             } else {
-                alert('Login failed: ' + (result.error || 'Unknown error'));
+                alert('❌ Login failed: ' + (result.error || 'Invalid credentials'));
             }
         } catch (error) {
             console.error('Login error:', error);
-            alert('Network error during login. Please try again.');
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                alert('❌ Cannot connect to server. Please check your internet connection or try again later.');
+            } else {
+                alert('❌ Network error during login. The server may be restarting. Please wait 30 seconds and try again.');
+            }
         }
     });
 });
