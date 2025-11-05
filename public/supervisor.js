@@ -160,13 +160,15 @@ function setupSKUManagement() {
             const response = await fetch('/api/supervisor/active-skus', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ activeSkus: activeSKUs })
+                body: JSON.stringify({ activeSKUs: activeSKUs })
             });
             
             const result = await response.json();
             
             if (result.success) {
                 alert(`✅ Successfully saved! ${activeSKUs.length} SKUs are now active in operator dropdowns.`);
+            } else {
+                alert('❌ Error: ' + (result.error || 'Unknown error'));
             }
         } catch (error) {
             console.error('Error saving SKU list:', error);
