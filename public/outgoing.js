@@ -432,9 +432,80 @@ async function createOutgoingTask() {
         if (result.success) {
             currentTaskId = result.task.id;
             console.log('Outgoing task created:', currentTaskId);
+            
+            // Start 30-minute countdown timer
+            startTaskTimer(result.task.created_at || new Date().toISOString());
         }
     } catch (error) {
         console.error('Error creating outgoing task:', error);
+    }
+}
+
+// Timer variables
+let timerInterval = null;
+const TASK_TIMEOUT_MINUTES = 30;
+
+function startTaskTimer(createdAt) {
+    const timerDisplay = document.getElementById('time-remaining-out');
+    if (!timerDisplay) return;
+    
+    const startTime = new Date(createdAt).getTime();
+    const endTime = startTime + (TASK_TIMEOUT_MINUTES * 60 * 1000);
+    
+    // Clear any existing timer
+    if (timerInterval) {
+        clearInterval(timerInterval);
+    }
+    
+    timerInterval = setInterval(() => {
+        const now = Date.now();
+        const remaining = endTime - now;
+        
+        if (remaining <= 0) {
+            clearInterval(timerInterval);
+            autoCancelTask();
+            return;
+        }
+        
+        // Calculate minutes and seconds
+        const minutes = Math.floor(remaining / 60000);
+        const seconds = Math.floor((remaining % 60000) / 1000);
+        
+        // Update display
+        timerDisplay.textContent = `${minutes}:${String(seconds).padStart(2, '0')}`;
+        
+        // Change color based on time remaining
+        if (remaining < 5 * 60 * 1000) { // Less than 5 minutes
+            timerDisplay.style.color = '#d9534f'; // Red
+            document.getElementById('timer-warning-out').style.background = '#f8d7da';
+            document.getElementById('timer-warning-out').style.borderColor = '#d9534f';
+        } else if (remaining < 10 * 60 * 1000) { // Less than 10 minutes
+            timerDisplay.style.color = '#f0ad4e'; // Orange
+        }
+    }, 1000);
+}
+
+async function autoCancelTask() {
+    if (!currentTaskId) return;
+    
+    try {
+        alert('⏰ Time expired! This task has been automatically cancelled. The selected bins are now available for other operators.');
+        
+        const response = await fetch('/api/tasks/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                taskId: currentTaskId,
+                reason: 'Auto-cancelled: 30-minute timeout exceeded'
+            })
+        });
+        
+        if (response.ok) {
+            window.location.href = 'dashboard.html';
+        }
+    } catch (error) {
+        console.error('Error auto-cancelling task:', error);
+        window.location.href = 'dashboard.html';
     }
 }
 
