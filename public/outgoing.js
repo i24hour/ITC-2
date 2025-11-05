@@ -443,7 +443,7 @@ async function createOutgoingTask() {
 
 // Timer variables
 let timerInterval = null;
-const TASK_TIMEOUT_MINUTES = 30;
+const TASK_TIMEOUT_MINUTES = 1; // 1 minute for testing
 
 function startTaskTimer(createdAt) {
     const timerDisplay = document.getElementById('time-remaining-out');

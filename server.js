@@ -864,7 +864,7 @@ app.post('/api/search-bins', async (req, res) => {
         FROM tasks
         WHERE status = 'ongoing' 
         AND sku = $1
-        AND created_at > NOW() - INTERVAL '30 minutes'
+        AND created_at > NOW() - INTERVAL '1 minute'
       ) t
       WHERE bin_no LIKE '%:%'
       GROUP BY SPLIT_PART(bin_no, ':', 1)
@@ -1905,9 +1905,9 @@ async function autoCancelExpiredTasks() {
       UPDATE tasks 
       SET status = 'cancelled',
           cancelled_at = CURRENT_TIMESTAMP,
-          cancellation_reason = 'Auto-cancelled: 30-minute timeout exceeded'
+          cancellation_reason = 'Auto-cancelled: 1-minute timeout exceeded (testing)'
       WHERE status = 'ongoing'
-      AND created_at < NOW() - INTERVAL '30 minutes'
+      AND created_at < NOW() - INTERVAL '1 minute'
       RETURNING id, operator, sku
     `);
     
