@@ -40,9 +40,10 @@ async function initSupervisorPanel() {
 
 async function loadAllSKUs() {
     try {
-        const response = await fetch('/api/sku-list');
+        // Use supervisor endpoint to get ALL SKUs (not filtered by active status)
+        const response = await fetch('/api/supervisor/active-skus');
         const data = await response.json();
-        allSKUs = data.skus;
+        allSKUs = data.allSKUs || [];
         
         document.getElementById('total-sku-count').textContent = allSKUs.length;
         renderSKUGrid();
