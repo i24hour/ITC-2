@@ -840,11 +840,13 @@ app.get('/api/task-history', async (req, res) => {
 
 // Get bins with quantity greater than specified value for a SKU
 app.post('/api/search-bins', async (req, res) => {
+  const client = await db.getClient();
   try {
     const { sku, value } = req.body;
     const minValue = parseInt(value) || 0;
     
-    const result = await db.query(
+    // Get all bins with this SKU
+    const result = await client.query(
       `SELECT bin_no, sku, cfc, qty
        FROM "Inventory"
        WHERE sku = $1 AND cfc > $2
@@ -852,20 +854,57 @@ app.post('/api/search-bins', async (req, res) => {
       [sku, minValue]
     );
     
-    // Convert to old format for compatibility
+    // Get currently reserved bins from active tasks (created within last 30 minutes)
+    const reservedBinsResult = await client.query(`
+      SELECT bin_no, SUM(
+        CAST(SPLIT_PART(SPLIT_PART(bin_no, ':', 2), ',', 1) AS INTEGER)
+      ) as reserved_qty
+      FROM (
+        SELECT UNNEST(string_to_array(bin_no, ',')) as bin_no
+        FROM tasks
+        WHERE status = 'ongoing' 
+        AND sku = $1
+        AND created_at > NOW() - INTERVAL '30 minutes'
+      ) t
+      WHERE bin_no LIKE '%:%'
+      GROUP BY SPLIT_PART(bin_no, ':', 1)
+    `, [sku]);
+    
+    // Create map of reserved quantities per bin
+    const reservedMap = new Map();
+    reservedBinsResult.rows.forEach(row => {
+      const binId = row.bin_no.split(':')[0];
+      reservedMap.set(binId, parseInt(row.reserved_qty) || 0);
+    });
+    
+    // Adjust available quantities by subtracting reserved amounts
     const binMap = new Map();
     result.rows.forEach(row => {
-      if (!binMap.has(row.bin_no)) {
-        binMap.set(row.bin_no, { 'Bin No.': row.bin_no });
+      const reservedQty = reservedMap.get(row.bin_no) || 0;
+      const availableQty = row.cfc - reservedQty;
+      
+      // Only include bins with available quantity after reservation
+      if (availableQty > minValue) {
+        if (!binMap.has(row.bin_no)) {
+          binMap.set(row.bin_no, { 'Bin No.': row.bin_no });
+        }
+        const bin = binMap.get(row.bin_no);
+        bin[row.sku] = availableQty; // Show available quantity, not total
+        
+        // Add indicator if bin is partially reserved
+        if (reservedQty > 0) {
+          bin['_reserved'] = reservedQty;
+          bin['_total'] = row.cfc;
+        }
       }
-      const bin = binMap.get(row.bin_no);
-      bin[row.sku] = row.cfc;
     });
     
     res.json(Array.from(binMap.values()));
   } catch (error) {
     console.error('Error searching bins:', error);
     res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -1813,6 +1852,80 @@ app.post('/api/tasks/complete', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Cancel a task (manual or auto-cancel)
+app.post('/api/tasks/cancel', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { taskId, reason } = req.body;
+    
+    if (!taskId) {
+      return res.status(400).json({ error: 'Task ID is required' });
+    }
+    
+    await client.query('BEGIN');
+    
+    // Update task status to cancelled
+    const result = await client.query(
+      `UPDATE tasks 
+       SET status = 'cancelled', 
+           cancelled_at = CURRENT_TIMESTAMP,
+           cancellation_reason = $2
+       WHERE id = $1 AND status = 'ongoing'
+       RETURNING *`,
+      [taskId, reason || 'Cancelled by user']
+    );
+    
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Task not found or already completed/cancelled' });
+    }
+    
+    await client.query('COMMIT');
+    
+    res.json({
+      success: true,
+      message: 'Task cancelled successfully',
+      task: result.rows[0]
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error cancelling task:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Auto-cancel expired tasks (run periodically)
+async function autoCancelExpiredTasks() {
+  const client = await db.getClient();
+  try {
+    const result = await client.query(`
+      UPDATE tasks 
+      SET status = 'cancelled',
+          cancelled_at = CURRENT_TIMESTAMP,
+          cancellation_reason = 'Auto-cancelled: 30-minute timeout exceeded'
+      WHERE status = 'ongoing'
+      AND created_at < NOW() - INTERVAL '30 minutes'
+      RETURNING id, operator, sku
+    `);
+    
+    if (result.rows.length > 0) {
+      console.log(`✅ Auto-cancelled ${result.rows.length} expired tasks:`, result.rows);
+    }
+  } catch (error) {
+    console.error('❌ Error auto-cancelling expired tasks:', error);
+  } finally {
+    client.release();
+  }
+}
+
+// Run auto-cancel check every 5 minutes
+setInterval(autoCancelExpiredTasks, 5 * 60 * 1000);
+
+// Run once on startup
+setTimeout(autoCancelExpiredTasks, 10000);
 
 // Check if task is cancelled
 app.get('/api/tasks/check/:taskId', async (req, res) => {
