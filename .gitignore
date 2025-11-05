@@ -53,7 +53,26 @@ OPERATOR_ID_FORMAT.md
 start-server.bat
 start-server.ps1
 
-# Deployment check scripts (not needed in deployment)
+# Test and utility scripts (not needed in production)
 check-deployment.bat
 check-operator-ids.js
 check-database-status.js
+check-inventory-data.js
+export-all-database.js
+test-db.js
+generate-all-bin-qrcodes.js
+generate-bin-qrcodes.js
+
+# Deployment scripts (Azure handles deployment via GitHub Actions)
+deploy-to-azure.ps1
+startup.sh
+.deployment-ignore
+host.json
+
+# Excel file (already imported to database)
+*.xlsx
+BINGO*.xlsx
+
+# Temporary/extra documentation files
+AZURE_DEPLOYMENT_GUIDE.md
+cribe your changes
