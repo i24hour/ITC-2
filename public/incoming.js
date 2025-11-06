@@ -114,9 +114,14 @@ function calculateWeight() {
 
 // Load available SKUs from server
 async function loadSKUList(inputElement) {
+    console.log('🔄 Loading SKU list...');
     try {
         const response = await fetch('/api/sku-list');
+        console.log('📡 API Response status:', response.status);
+        
         const data = await response.json();
+        console.log('📦 SKU data received:', data);
+        console.log('📊 Total SKUs:', data.skus ? data.skus.length : 0);
         
         // Clear existing options except the first one
         inputElement.innerHTML = '<option value="">Select a SKU...</option>';
@@ -128,8 +133,10 @@ async function loadSKUList(inputElement) {
             option.textContent = sku;
             inputElement.appendChild(option);
         });
+        
+        console.log('✅ SKU list loaded successfully');
     } catch (error) {
-        console.error('Error loading SKU list:', error);
+        console.error('❌ Error loading SKU list:', error);
     }
 }
 
