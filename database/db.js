@@ -21,7 +21,8 @@ pool.on('connect', () => {
 
 pool.on('error', (err) => {
     console.error('❌ Unexpected error on idle client', err);
-    process.exit(-1);
+    // Don't exit - let Azure handle restart if needed
+    // Pool will attempt to reconnect automatically
 });
 
 // Query helper function

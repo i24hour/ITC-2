@@ -2709,6 +2709,25 @@ app.get('/api/debug/inventory', async (req, res) => {
 
 // ==================== SERVER START ====================
 
+// Global error handlers to prevent crashes
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+  // Don't exit - keep server running
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise);
+  console.error('Reason:', reason);
+  // Don't exit - keep server running
+});
+
+// Database connection error handling
+db.pool.on('error', (err) => {
+  console.error('❌ Unexpected database error:', err);
+  // Pool will auto-reconnect
+});
+
 // Start server
 app.listen(PORT, async () => {
   console.log(`\n🚀 Server running!`);
