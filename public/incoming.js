@@ -97,14 +97,18 @@ function calculateWeight() {
     
     const cfc = parseInt(cfcInput.value);
     
+    console.log('calculateWeight called - CFC:', cfc, 'UOM:', currentUOM);
+    
     // Only calculate if we have both CFC and UOM
     if (cfc && currentUOM) {
         const calculatedWeight = (cfc * currentUOM).toFixed(3); // 3 decimal places
         weightInput.value = calculatedWeight;
         weightInput.style.backgroundColor = '#e8f5e9'; // Light green to show auto-filled
+        console.log('✅ Weight calculated:', calculatedWeight);
     } else {
         weightInput.value = '';
         weightInput.style.backgroundColor = '';
+        console.log('⚠️ Missing data - CFC:', cfc, 'UOM:', currentUOM);
     }
 }
 
