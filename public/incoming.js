@@ -6,6 +6,7 @@ let selectedBins = [];
 let html5QrCode;
 let currentTaskId = null; // Store task ID for tracking
 let taskStartTime = null; // Store when task started
+let currentUOM = null; // Store UOM for weight calculation
 
 document.addEventListener('DOMContentLoaded', () => {
     // Check authentication
@@ -38,10 +39,18 @@ function initStep1() {
         const sku = e.target.value.trim();
         if (sku) {
             await fetchAndDisplaySKUDetails(sku);
+            // Auto-calculate weight if CFC is already entered
+            calculateWeight();
         } else {
             // Hide description if no SKU selected
             document.getElementById('sku-description-container').style.display = 'none';
         }
+    });
+    
+    // Add event listener for CFC count to auto-calculate weight
+    const cfcInput = document.getElementById('cfc-count');
+    cfcInput.addEventListener('input', () => {
+        calculateWeight();
     });
     
     form.addEventListener('submit', (e) => {
@@ -69,6 +78,7 @@ async function fetchAndDisplaySKUDetails(sku) {
         const data = await response.json();
         
         if (data.description) {
+            currentUOM = parseFloat(data.uom); // Store UOM for calculation
             document.getElementById('sku-description').textContent = data.description;
             document.getElementById('sku-uom').textContent = `UOM: ${data.uom} kg per CFC`;
             document.getElementById('sku-description-container').style.display = 'block';
@@ -76,6 +86,25 @@ async function fetchAndDisplaySKUDetails(sku) {
     } catch (error) {
         console.error('Error fetching SKU details:', error);
         document.getElementById('sku-description-container').style.display = 'none';
+        currentUOM = null;
+    }
+}
+
+// Auto-calculate weight based on CFC × UOM
+function calculateWeight() {
+    const cfcInput = document.getElementById('cfc-count');
+    const weightInput = document.getElementById('weight-input');
+    
+    const cfc = parseInt(cfcInput.value);
+    
+    // Only calculate if we have both CFC and UOM
+    if (cfc && currentUOM) {
+        const calculatedWeight = (cfc * currentUOM).toFixed(3); // 3 decimal places
+        weightInput.value = calculatedWeight;
+        weightInput.style.backgroundColor = '#e8f5e9'; // Light green to show auto-filled
+    } else {
+        weightInput.value = '';
+        weightInput.style.backgroundColor = '';
     }
 }
 
