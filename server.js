@@ -2825,8 +2825,8 @@ app.post('/api/admin/update-expire-days', async (req, res) => {
     const worksheet = workbook.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
     
-    // Extract SKU, MFD, Expiry dates
-    const skuDateMap = new Map();
+    // Extract SKU and Expiry days
+    const skuExpireMap = new Map();
     
     for (let i = 8; i < data.length; i++) {
       const row = data[i];
@@ -2845,59 +2845,50 @@ app.post('/api/admin/update-expire-days', async (req, res) => {
           
           const diffDays = Math.ceil((expiry - mfd) / (1000 * 60 * 60 * 24));
           
-          if (!skuDateMap.has(sku)) {
-            skuDateMap.set(sku, []);
+          if (!skuExpireMap.has(sku)) {
+            skuExpireMap.set(sku, []);
           }
           
-          skuDateMap.get(sku).push({
-            mfd: mfd.toISOString().split('T')[0],
-            expiry: expiry.toISOString().split('T')[0],
-            days: diffDays
-          });
+          skuExpireMap.get(sku).push(diffDays);
         }
       }
     }
     
     // Calculate averages
+    
     const finalMap = new Map();
-    for (const [sku, entries] of skuDateMap) {
-      const avgDays = Math.round(entries.reduce((a, b) => a + b.days, 0) / entries.length);
-      const latest = entries[entries.length - 1];
-      finalMap.set(sku, {
-        mfd: latest.mfd,
-        expiry: latest.expiry,
-        days: avgDays
-      });
+    for (const [sku, days] of skuExpireMap) {
+      const avgDays = Math.round(days.reduce((a, b) => a + b, 0) / days.length);
+      finalMap.set(sku, avgDays);
     }
     
     await client.query('BEGIN');
     
-    // Drop aging_days, add new columns
+    // Drop old columns
     await client.query(`
       ALTER TABLE "Cleaned_FG_Master_file" 
-      DROP COLUMN IF EXISTS aging_days
+      DROP COLUMN IF EXISTS aging_days,
+      DROP COLUMN IF EXISTS mfd_date,
+      DROP COLUMN IF EXISTS expiry_date
     `);
     
+    // Add expire_in_days column
     await client.query(`
       ALTER TABLE "Cleaned_FG_Master_file" 
-      ADD COLUMN IF NOT EXISTS mfd_date DATE DEFAULT NULL,
-      ADD COLUMN IF NOT EXISTS expiry_date DATE DEFAULT NULL,
       ADD COLUMN IF NOT EXISTS expire_in_days INTEGER DEFAULT NULL
     `);
     
     // Update values
     let updatedCount = 0;
-    for (const [sku, data] of finalMap) {
+    for (const [sku, days] of finalMap) {
       const result = await client.query(
         `UPDATE "Cleaned_FG_Master_file" 
-         SET mfd_date = $1, expiry_date = $2, expire_in_days = $3 
-         WHERE sku = $4`,
-        [data.mfd, data.expiry, data.days, sku]
+         SET expire_in_days = $1 
+         WHERE sku = $2`,
+        [days, sku]
       );
       if (result.rowCount > 0) updatedCount++;
-    }
-    
-    await client.query('COMMIT');
+    }    await client.query('COMMIT');
     
     // Get stats
     const stats = await client.query(`
