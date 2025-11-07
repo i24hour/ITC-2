@@ -3072,6 +3072,113 @@ app.post('/api/admin/add-batch-numbers', async (req, res) => {
   }
 });
 
+// ==================== EXPIRE DAYS CALCULATION API ====================
+
+app.post('/api/admin/add-expire-days-column', async (req, res) => {
+  const client = await db.getClient();
+  
+  try {
+    console.log('⏰ Adding expire_days column to Inventory...');
+    
+    await client.query('BEGIN');
+    
+    // Add expire_days column
+    await client.query(`
+      ALTER TABLE "Inventory" 
+      ADD COLUMN IF NOT EXISTS expire_days INTEGER DEFAULT NULL
+    `);
+    
+    // Get all inventory items with their batch dates
+    const inventoryItems = await client.query(`
+      SELECT id, sku, batch_no FROM "Inventory"
+    `);
+    
+    let updatedCount = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset to midnight
+    
+    for (const item of inventoryItems.rows) {
+      // Get expire_in_days from master file
+      const masterData = await client.query(
+        `SELECT expire_in_days FROM "Cleaned_FG_Master_file" WHERE sku = $1`,
+        [item.sku]
+      );
+      
+      if (masterData.rows.length > 0 && masterData.rows[0].expire_in_days) {
+        const expireInDays = masterData.rows[0].expire_in_days;
+        
+        // Parse batch date (format: Z07NOV25)
+        const batchNo = item.batch_no;
+        if (batchNo && batchNo.startsWith('Z')) {
+          const dateStr = batchNo.substring(1); // Remove 'Z'
+          const day = parseInt(dateStr.substring(0, 2));
+          const monthStr = dateStr.substring(2, 5).toUpperCase();
+          const year = parseInt('20' + dateStr.substring(5, 7));
+          
+          const monthMap = {
+            'JAN': 0, 'FEB': 1, 'MAR': 2, 'APR': 3, 'MAY': 4, 'JUN': 5,
+            'JUL': 6, 'AUG': 7, 'SEP': 8, 'OCT': 9, 'NOV': 10, 'DEC': 11
+          };
+          
+          if (monthMap[monthStr] !== undefined) {
+            const batchDate = new Date(year, monthMap[monthStr], day);
+            batchDate.setHours(0, 0, 0, 0);
+            
+            // Calculate days passed since batch date
+            const daysPassed = Math.floor((today - batchDate) / (1000 * 60 * 60 * 24));
+            
+            // Calculate remaining expire days
+            const expireDays = expireInDays - daysPassed;
+            
+            // Update inventory
+            await client.query(
+              `UPDATE "Inventory" SET expire_days = $1 WHERE id = $2`,
+              [expireDays, item.id]
+            );
+            
+            updatedCount++;
+          }
+        }
+      }
+    }
+    
+    await client.query('COMMIT');
+    
+    // Get stats
+    const stats = await client.query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(expire_days) as with_expire_days,
+        AVG(expire_days) as avg_expire_days
+      FROM "Inventory"
+    `);
+    
+    res.json({
+      success: true,
+      message: 'expire_days column added and calculated successfully',
+      stats: {
+        totalItems: parseInt(stats.rows[0].total),
+        itemsWithExpireDays: parseInt(stats.rows[0].with_expire_days),
+        itemsUpdated: updatedCount,
+        averageExpireDays: Math.round(stats.rows[0].avg_expire_days) || 0
+      }
+    });
+    
+    console.log(`✅ Expire days calculated: ${updatedCount} items`);
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Expire days calculation failed:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      stack: error.stack 
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== SERVER START ====================
 
 // Global error handlers to prevent crashes
@@ -3127,6 +3234,76 @@ app.listen(PORT, async () => {
     }, 60 * 60 * 1000);
     
     console.log('✅ Session management initialized\n');
+    
+    // Schedule daily expire_days update (every 24 hours at midnight)
+    const updateExpireDays = async () => {
+      try {
+        console.log('⏰ Running daily expire_days update...');
+        const client = await db.getClient();
+        
+        try {
+          const inventoryItems = await client.query(`
+            SELECT id, sku, batch_no FROM "Inventory"
+          `);
+          
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          let updatedCount = 0;
+          
+          for (const item of inventoryItems.rows) {
+            const masterData = await client.query(
+              `SELECT expire_in_days FROM "Cleaned_FG_Master_file" WHERE sku = $1`,
+              [item.sku]
+            );
+            
+            if (masterData.rows.length > 0 && masterData.rows[0].expire_in_days) {
+              const expireInDays = masterData.rows[0].expire_in_days;
+              const batchNo = item.batch_no;
+              
+              if (batchNo && batchNo.startsWith('Z')) {
+                const dateStr = batchNo.substring(1);
+                const day = parseInt(dateStr.substring(0, 2));
+                const monthStr = dateStr.substring(2, 5).toUpperCase();
+                const year = parseInt('20' + dateStr.substring(5, 7));
+                
+                const monthMap = {
+                  'JAN': 0, 'FEB': 1, 'MAR': 2, 'APR': 3, 'MAY': 4, 'JUN': 5,
+                  'JUL': 6, 'AUG': 7, 'SEP': 8, 'OCT': 9, 'NOV': 10, 'DEC': 11
+                };
+                
+                if (monthMap[monthStr] !== undefined) {
+                  const batchDate = new Date(year, monthMap[monthStr], day);
+                  batchDate.setHours(0, 0, 0, 0);
+                  
+                  const daysPassed = Math.floor((today - batchDate) / (1000 * 60 * 60 * 24));
+                  const expireDays = expireInDays - daysPassed;
+                  
+                  await client.query(
+                    `UPDATE "Inventory" SET expire_days = $1 WHERE id = $2`,
+                    [expireDays, item.id]
+                  );
+                  
+                  updatedCount++;
+                }
+              }
+            }
+          }
+          
+          console.log(`✅ Daily expire_days update complete: ${updatedCount} items updated`);
+        } finally {
+          client.release();
+        }
+      } catch (error) {
+        console.error('❌ Daily expire_days update failed:', error.message);
+      }
+    };
+    
+    // Run update every 24 hours (86400000 ms)
+    setInterval(updateExpireDays, 24 * 60 * 60 * 1000);
+    
+    // Also run once on startup
+    setTimeout(updateExpireDays, 5000); // Wait 5 seconds after startup
   } catch (error) {
     console.error('❌ Failed to connect to database:', error.message);
     console.error('   Please check your .env configuration\n');
