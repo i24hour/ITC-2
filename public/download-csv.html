@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download Cleaned_FG_Master_file CSV</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .download-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            margin: 10px;
+        }
+        
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        .download-btn:active {
+            transform: translateY(0);
+        }
+        
+        .info-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+            border-radius: 5px;
+        }
+        
+        .info-box h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .info-box ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .info-box li {
+            padding: 5px 0;
+            color: #555;
+            font-size: 14px;
+        }
+        
+        .info-box li:before {
+            content: "✓ ";
+            color: #667eea;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            display: none;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .alternative-link {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e7f3ff;
+            border-radius: 10px;
+            color: #004085;
+            font-size: 13px;
+            word-break: break-all;
+        }
+        
+        .alternative-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        
+        .alternative-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📥 Download CSV</h1>
+        <p class="subtitle">Cleaned_FG_Master_file Database Table</p>
+        
+        <button class="download-btn" onclick="downloadCSV()">
+            <span id="btn-text">Download CSV File</span>
+        </button>
+        
+        <div class="info-box">
+            <h3>📊 What's Included:</h3>
+            <ul>
+                <li>SKU (Product Code)</li>
+                <li>Description (Product Name)</li>
+                <li>UOM (Unit of Measurement)</li>
+                <li>Aging Days (if populated)</li>
+                <li>Created At (Timestamp)</li>
+            </ul>
+        </div>
+        
+        <div id="status" class="status"></div>
+        
+        <div class="alternative-link">
+            <strong>Direct Link:</strong><br>
+            <a href="https://itc-warehouse-app-2025-c8hgg5deeagae5dj.centralindia-01.azurewebsites.net/api/admin/export-table/Cleaned_FG_Master_file" target="_blank">
+                Click here if download doesn't start
+            </a>
+        </div>
+    </div>
+    
+    <script>
+        function downloadCSV() {
+            const btn = document.querySelector('.download-btn');
+            const btnText = document.getElementById('btn-text');
+            const status = document.getElementById('status');
+            
+            // Show loading
+            btnText.innerHTML = '<span class="loading"></span>Downloading...';
+            btn.disabled = true;
+            status.style.display = 'none';
+            
+            // Create download link
+            const url = 'https://itc-warehouse-app-2025-c8hgg5deeagae5dj.centralindia-01.azurewebsites.net/api/admin/export-table/Cleaned_FG_Master_file';
+            
+            // Test if URL is accessible
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch data from server');
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    // Create download
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = `Cleaned_FG_Master_file_${Date.now()}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(downloadUrl);
+                    document.body.removeChild(a);
+                    
+                    // Show success
+                    status.className = 'status success';
+                    status.textContent = '✅ CSV file downloaded successfully!';
+                    status.style.display = 'block';
+                    
+                    // Reset button
+                    btnText.textContent = 'Download Again';
+                    btn.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Download error:', error);
+                    
+                    // Try direct window.open as fallback
+                    window.open(url, '_blank');
+                    
+                    // Show error with alternative
+                    status.className = 'status error';
+                    status.innerHTML = '⚠️ Auto-download failed. Opening in new tab...<br><small>If nothing happens, use the direct link below.</small>';
+                    status.style.display = 'block';
+                    
+                    // Reset button
+                    btnText.textContent = 'Try Again';
+                    btn.disabled = false;
+                });
+        }
+    </script>
+</body>
+</html>

@@ -2707,6 +2707,106 @@ app.get('/api/debug/inventory', async (req, res) => {
   }
 });
 
+// ==================== AGING COLUMN POPULATION API ====================
+
+app.post('/api/admin/populate-aging', async (req, res) => {
+  const client = await db.getClient();
+  
+  try {
+    console.log('🔄 Starting aging column population from Excel...');
+    
+    const XLSX = require('xlsx');
+    const path = require('path');
+    
+    // Read Excel file
+    const excelPath = path.join(__dirname, 'BATCHWISE AGE ANALYSIS REPORT.XLS');
+    const workbook = XLSX.readFile(excelPath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    
+    // Extract SKU-aging pairs
+    const agingMap = new Map();
+    let processedRows = 0;
+    
+    for (let i = 8; i < data.length; i++) {
+      const row = data[i];
+      const sku = row[3]?.toString().trim(); // Column D
+      const aging = parseInt(row[17]); // Column R
+      
+      if (sku && !isNaN(aging)) {
+        if (!agingMap.has(sku)) {
+          agingMap.set(sku, []);
+        }
+        agingMap.get(sku).push(aging);
+        processedRows++;
+      }
+    }
+    
+    // Calculate average aging
+    const skuAgingData = new Map();
+    for (const [sku, agingValues] of agingMap) {
+      const avgAging = Math.round(agingValues.reduce((a, b) => a + b, 0) / agingValues.length);
+      skuAgingData.set(sku, avgAging);
+    }
+    
+    await client.query('BEGIN');
+    
+    // Add column if not exists
+    await client.query(`
+      ALTER TABLE "Cleaned_FG_Master_file" 
+      ADD COLUMN IF NOT EXISTS aging_days INTEGER DEFAULT NULL
+    `);
+    
+    // Update aging values
+    let updatedCount = 0;
+    for (const [sku, avgAging] of skuAgingData) {
+      const result = await client.query(
+        `UPDATE "Cleaned_FG_Master_file" 
+         SET aging_days = $1 
+         WHERE sku = $2`,
+        [avgAging, sku]
+      );
+      if (result.rowCount > 0) updatedCount++;
+    }
+    
+    await client.query('COMMIT');
+    
+    // Get stats
+    const stats = await client.query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(aging_days) as with_aging,
+        AVG(aging_days) as avg_aging
+      FROM "Cleaned_FG_Master_file"
+    `);
+    
+    res.json({
+      success: true,
+      message: 'Aging column populated successfully',
+      stats: {
+        totalSKUs: parseInt(stats.rows[0].total),
+        skusWithAging: parseInt(stats.rows[0].with_aging),
+        skusUpdated: updatedCount,
+        averageAging: Math.round(stats.rows[0].avg_aging)
+      }
+    });
+    
+    console.log(`✅ Aging populated: ${updatedCount} SKUs updated`);
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Aging population failed:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      stack: error.stack 
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== SERVER START ====================
 
 // Global error handlers to prevent crashes

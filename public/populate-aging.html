@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Populate Aging Column</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .action-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            margin: 10px;
+        }
+        
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        .action-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .info-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+            border-radius: 5px;
+        }
+        
+        .info-box h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .info-box ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .info-box li {
+            padding: 5px 0;
+            color: #555;
+            font-size: 14px;
+        }
+        
+        .info-box li:before {
+            content: "• ";
+            color: #667eea;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            display: none;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⏱️ Populate Aging Column</h1>
+        <p class="subtitle">Add aging data from Excel to database</p>
+        
+        <button class="action-btn" id="populateBtn" onclick="populateAging()">
+            <span id="btn-text">Populate Aging Data</span>
+        </button>
+        
+        <div class="info-box">
+            <h3>📋 What This Does:</h3>
+            <ul>
+                <li>Reads BATCHWISE AGE ANALYSIS REPORT.XLS</li>
+                <li>Extracts aging data (Column R) for each SKU (Column D)</li>
+                <li>Adds aging_days column to Cleaned_FG_Master_file</li>
+                <li>Updates all SKUs with average aging values</li>
+            </ul>
+        </div>
+        
+        <div id="status" class="status"></div>
+        
+        <div id="stats" style="display:none;" class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="totalSkus">0</div>
+                <div class="stat-label">Total SKUs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="withAging">0</div>
+                <div class="stat-label">With Aging</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="updated">0</div>
+                <div class="stat-label">Updated</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="avgAging">0</div>
+                <div class="stat-label">Avg Days</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function populateAging() {
+            const btn = document.getElementById('populateBtn');
+            const btnText = document.getElementById('btn-text');
+            const status = document.getElementById('status');
+            const statsDiv = document.getElementById('stats');
+            
+            // Show loading
+            btnText.innerHTML = '<span class="loading"></span>Processing...';
+            btn.disabled = true;
+            status.style.display = 'none';
+            statsDiv.style.display = 'none';
+            
+            // Call API
+            fetch('/api/admin/populate-aging', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success
+                    status.className = 'status success';
+                    status.innerHTML = `
+                        <strong>✅ Success!</strong><br>
+                        ${data.message}
+                    `;
+                    status.style.display = 'block';
+                    
+                    // Show stats
+                    document.getElementById('totalSkus').textContent = data.stats.totalSKUs;
+                    document.getElementById('withAging').textContent = data.stats.skusWithAging;
+                    document.getElementById('updated').textContent = data.stats.skusUpdated;
+                    document.getElementById('avgAging').textContent = data.stats.averageAging;
+                    statsDiv.style.display = 'grid';
+                    
+                    btnText.textContent = 'Update Again';
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                status.className = 'status error';
+                status.innerHTML = `
+                    <strong>❌ Error:</strong><br>
+                    ${error.message}
+                `;
+                status.style.display = 'block';
+                btnText.textContent = 'Try Again';
+            })
+            .finally(() => {
+                btn.disabled = false;
+            });
+        }
+    </script>
+</body>
+</html>
