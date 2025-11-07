@@ -48,6 +48,7 @@ async function restructure() {
                 sku VARCHAR(50) PRIMARY KEY,
                 description TEXT NOT NULL,
                 uom DECIMAL(10,3) NOT NULL,
+                aging_days INTEGER DEFAULT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
@@ -154,7 +155,31 @@ async function restructure() {
         `);
         console.log('✅ Operators table created');
         
-        // ==================== TABLE 7: Task_History ====================
+        // ==================== TABLE 7: Supervisors ====================
+        console.log('\n📋 Creating Supervisors table...');
+        await db.query('DROP TABLE IF EXISTS "Supervisors" CASCADE');
+        await db.query(`
+            CREATE TABLE "Supervisors" (
+                supervisor_id VARCHAR(10) PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                email VARCHAR(100) UNIQUE NOT NULL,
+                password_hash VARCHAR(255),
+                phone VARCHAR(20),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_login TIMESTAMP
+            )
+        `);
+        console.log('✅ Supervisors table created');
+        
+        // Insert default supervisor
+        await db.query(`
+            INSERT INTO "Supervisors" (supervisor_id, name, email, password_hash, phone)
+            VALUES ('SUP001', 'Supervisor Admin', 'supervisor@itc.com', 'supervisor123', '9876543210')
+            ON CONFLICT (email) DO NOTHING
+        `);
+        console.log('✅ Default supervisor added (supervisor@itc.com / supervisor123)');
+        
+        // ==================== TABLE 8: Task_History ====================
         console.log('\n📋 Creating Task_History table...');
         await db.query('DROP TABLE IF EXISTS "Task_History" CASCADE');
         await db.query(`
@@ -187,9 +212,10 @@ async function restructure() {
         console.log(`📤 Table 4: Outgoing - 0 records (ready for transactions)`);
         console.log(`🗃️ Table 5: Bins - ${bins.length} bins (A-P categories)`);
         console.log(`👤 Table 6: Operators - 0 records (ready for signups)`);
-        console.log(`📋 Table 7: Task_History - 0 records (ready for tracking)`);
+        console.log(`� Table 7: Supervisors - 1 supervisor (supervisor@itc.com)`);
+        console.log(`�📋 Table 8: Task_History - 0 records (ready for tracking)`);
         console.log('='.repeat(60));
-        console.log('\n✅ All 7 tables created successfully!');
+        console.log('\n✅ All 8 tables created successfully!');
         console.log('🚀 You can now use the system.\n');
         
         await db.end();

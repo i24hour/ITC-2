@@ -9,7 +9,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const email = document.getElementById('login-email').value;
         const password = document.getElementById('login-password').value;
-        const role = document.getElementById('user-role').value;
 
         try {
             // Call server-side authentication API
@@ -39,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     operatorId: result.user.operatorId,
                     email: result.user.email,
                     name: result.user.name,
-                    role: role,
+                    role: result.user.role, // Role auto-detected by server
                     loggedIn: true,
                     sessionToken: result.sessionToken,
                     expiresAt: result.expiresAt,
@@ -51,8 +50,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 console.log('✅ Login successful with server session, Operator ID:', result.user.operatorId);
                 
-                // Redirect to dashboard
-                window.location.href = 'dashboard.html';
+                // Redirect based on role
+                if (result.user.role === 'supervisor') {
+                    window.location.href = 'supervisor.html';
+                } else {
+                    window.location.href = 'dashboard.html';
+                }
             } else {
                 alert('❌ Login failed: ' + (result.error || 'Invalid credentials'));
             }

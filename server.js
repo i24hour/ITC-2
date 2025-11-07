@@ -479,7 +479,7 @@ app.get('/api/admin/export-table/:tableName', async (req, res) => {
 
 // ==================== AUTHENTICATION API ENDPOINTS ====================
 
-// Login endpoint - creates server-side session
+// Login endpoint - creates server-side session with auto role detection
 app.post('/api/auth/login', async (req, res) => {
   const client = await db.getClient();
   try {
@@ -489,41 +489,77 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email is required' });
     }
     
-    let operatorId = null;
-    let operatorName = name || email;
+    let userId = null;
+    let userName = name || email;
+    let userRole = 'operator'; // default
     let useNewStructure = false;
     
-    // Try to fetch from Operators table
+    // FIRST: Check in Supervisors table
     try {
-      const operatorResult = await client.query(
-        `SELECT operator_id, name, email FROM "Operators" WHERE email = $1`,
+      const supervisorResult = await client.query(
+        `SELECT supervisor_id, name, email, password_hash FROM "Supervisors" WHERE email = $1`,
         [email]
       );
       
-      if (operatorResult.rows.length > 0) {
-        // Operator found in new structure
-        const operator = operatorResult.rows[0];
-        operatorId = operator.operator_id;
-        operatorName = operator.name;
-        useNewStructure = true;
+      if (supervisorResult.rows.length > 0) {
+        const supervisor = supervisorResult.rows[0];
         
-        // Update last login
-        await client.query(
-          `UPDATE "Operators" SET last_login = CURRENT_TIMESTAMP WHERE operator_id = $1`,
-          [operatorId]
-        );
-      } else {
-        // Operators table exists but user not found - allow session-only login
-        console.log('User not found in Operators table, creating session-only login');
-        operatorId = email;
+        // Check password (plain text for now)
+        if (password && supervisor.password_hash === password) {
+          userId = supervisor.supervisor_id;
+          userName = supervisor.name;
+          userRole = 'supervisor';
+          useNewStructure = true;
+          
+          console.log('✅ Supervisor login successful:', userId);
+        } else if (!password) {
+          // No password validation needed for now
+          userId = supervisor.supervisor_id;
+          userName = supervisor.name;
+          userRole = 'supervisor';
+          useNewStructure = true;
+        }
       }
     } catch (err) {
-      // Operators table doesn't exist - use session-only auth
-      console.log('Operators table not found, using session-only auth:', err.message);
-      operatorId = email;
+      console.log('Supervisors table check failed:', err.message);
     }
     
-    const sessionResult = await sessions.createSession(email, operatorName, operatorId);
+    // SECOND: If not supervisor, check Operators table
+    if (!userId) {
+      try {
+        const operatorResult = await client.query(
+          `SELECT operator_id, name, email FROM "Operators" WHERE email = $1`,
+          [email]
+        );
+        
+        if (operatorResult.rows.length > 0) {
+          // Operator found in new structure
+          const operator = operatorResult.rows[0];
+          userId = operator.operator_id;
+          userName = operator.name;
+          userRole = 'operator';
+          useNewStructure = true;
+          
+          // Update last login
+          await client.query(
+            `UPDATE "Operators" SET last_login = CURRENT_TIMESTAMP WHERE operator_id = $1`,
+            [userId]
+          );
+          
+          console.log('✅ Operator login successful:', userId);
+        } else {
+          // Operators table exists but user not found - allow session-only login
+          console.log('User not found in Operators table, creating session-only login');
+          userId = email;
+        }
+      } catch (err) {
+        // Operators table doesn't exist - use session-only auth
+        console.log('Operators table not found, using session-only auth:', err.message);
+        userId = email;
+      }
+    }
+    
+    const sessionResult = await sessions.createSession(email, userName, userId);
     
     if (!sessionResult.success) {
       console.error('Failed to create session:', sessionResult.error);
@@ -533,9 +569,10 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({
       success: true,
       user: {
-        operatorId: operatorId,
+        operatorId: userId,
         email: email,
-        name: operatorName,
+        name: userName,
+        role: userRole, // Auto-detected role
         loggedIn: true
       },
       sessionToken: sessionResult.sessionToken,
