@@ -2807,6 +2807,133 @@ app.post('/api/admin/populate-aging', async (req, res) => {
   }
 });
 
+// ==================== EXPIRE DAYS COLUMN API ====================
+
+app.post('/api/admin/update-expire-days', async (req, res) => {
+  const client = await db.getClient();
+  
+  try {
+    console.log('🔄 Replacing aging_days with expire_in_days...');
+    
+    const XLSX = require('xlsx');
+    const path = require('path');
+    
+    // Read Excel file
+    const excelPath = path.join(__dirname, 'BATCHWISE AGE ANALYSIS REPORT.XLS');
+    const workbook = XLSX.readFile(excelPath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    
+    // Extract SKU, MFD, Expiry dates
+    const skuDateMap = new Map();
+    
+    for (let i = 8; i < data.length; i++) {
+      const row = data[i];
+      const sku = row[3]?.toString().trim(); // Column D
+      const mfdDate = row[16]; // Column Q
+      const expiryDate = row[18]; // Column S
+      
+      if (sku && mfdDate && expiryDate) {
+        // Parse dates (DD.MM.YYYY format)
+        const parseMFD = mfdDate.toString().split('.');
+        const parseExpiry = expiryDate.toString().split('.');
+        
+        if (parseMFD.length === 3 && parseExpiry.length === 3) {
+          const mfd = new Date(parseMFD[2], parseMFD[1] - 1, parseMFD[0]);
+          const expiry = new Date(parseExpiry[2], parseExpiry[1] - 1, parseExpiry[0]);
+          
+          const diffDays = Math.ceil((expiry - mfd) / (1000 * 60 * 60 * 24));
+          
+          if (!skuDateMap.has(sku)) {
+            skuDateMap.set(sku, []);
+          }
+          
+          skuDateMap.get(sku).push({
+            mfd: mfd.toISOString().split('T')[0],
+            expiry: expiry.toISOString().split('T')[0],
+            days: diffDays
+          });
+        }
+      }
+    }
+    
+    // Calculate averages
+    const finalMap = new Map();
+    for (const [sku, entries] of skuDateMap) {
+      const avgDays = Math.round(entries.reduce((a, b) => a + b.days, 0) / entries.length);
+      const latest = entries[entries.length - 1];
+      finalMap.set(sku, {
+        mfd: latest.mfd,
+        expiry: latest.expiry,
+        days: avgDays
+      });
+    }
+    
+    await client.query('BEGIN');
+    
+    // Drop aging_days, add new columns
+    await client.query(`
+      ALTER TABLE "Cleaned_FG_Master_file" 
+      DROP COLUMN IF EXISTS aging_days
+    `);
+    
+    await client.query(`
+      ALTER TABLE "Cleaned_FG_Master_file" 
+      ADD COLUMN IF NOT EXISTS mfd_date DATE DEFAULT NULL,
+      ADD COLUMN IF NOT EXISTS expiry_date DATE DEFAULT NULL,
+      ADD COLUMN IF NOT EXISTS expire_in_days INTEGER DEFAULT NULL
+    `);
+    
+    // Update values
+    let updatedCount = 0;
+    for (const [sku, data] of finalMap) {
+      const result = await client.query(
+        `UPDATE "Cleaned_FG_Master_file" 
+         SET mfd_date = $1, expiry_date = $2, expire_in_days = $3 
+         WHERE sku = $4`,
+        [data.mfd, data.expiry, data.days, sku]
+      );
+      if (result.rowCount > 0) updatedCount++;
+    }
+    
+    await client.query('COMMIT');
+    
+    // Get stats
+    const stats = await client.query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(expire_in_days) as with_expire_days,
+        AVG(expire_in_days) as avg_expire_days
+      FROM "Cleaned_FG_Master_file"
+    `);
+    
+    res.json({
+      success: true,
+      message: 'expire_in_days column updated successfully',
+      stats: {
+        totalSKUs: parseInt(stats.rows[0].total),
+        skusWithExpireDays: parseInt(stats.rows[0].with_expire_days),
+        skusUpdated: updatedCount,
+        averageExpireDays: Math.round(stats.rows[0].avg_expire_days)
+      }
+    });
+    
+    console.log(`✅ Expire days updated: ${updatedCount} SKUs`);
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Expire days update failed:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      stack: error.stack 
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== SERVER START ====================
 
 // Global error handlers to prevent crashes
