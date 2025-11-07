@@ -38,6 +38,12 @@ document.addEventListener('DOMContentLoaded', () => {
     loadTaskHistory();
     loadReminders();
 
+    // Expiry filter change event
+    const expiryFilter = document.getElementById('expiry-filter');
+    if (expiryFilter) {
+        expiryFilter.addEventListener('change', () => loadReminders());
+    }
+
     // Task history filter and refresh
     const taskTypeFilter = document.getElementById('task-type-filter');
     const refreshBtn = document.getElementById('refresh-history');
@@ -158,10 +164,65 @@ async function loadTaskHistory() {
 }
 
 // Load expiry reminders
-function loadReminders() {
-    // TODO: Fetch from API
-    // Mock data is already in HTML
-    console.log('Loading reminders...');
+async function loadReminders() {
+    const remindersList = document.getElementById('reminders-list');
+    const filterValue = document.getElementById('expiry-filter')?.value || '15';
+    
+    if (!remindersList) return;
+    
+    try {
+        remindersList.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">Loading expiry reminders...</p>';
+        
+        // Fetch inventory with expire_days
+        const response = await fetch('/api/inventory/expiry-reminders?filter=' + filterValue);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('Expiry reminders response:', data);
+        
+        if (data.success && data.items && data.items.length > 0) {
+            remindersList.innerHTML = '';
+            
+            data.items.forEach(item => {
+                const reminderItem = document.createElement('div');
+                let itemClass = 'reminder-item';
+                let icon = '🟢';
+                
+                // Color coding based on expire_days
+                if (item.expire_days <= 2) {
+                    itemClass += ' urgent';
+                    icon = '🔴';
+                } else if (item.expire_days <= 7) {
+                    itemClass += ' warning';
+                    icon = '🟡';
+                } else {
+                    itemClass += ' info';
+                    icon = '🟢';
+                }
+                
+                reminderItem.className = itemClass;
+                reminderItem.innerHTML = `
+                    <div class="reminder-icon">${icon}</div>
+                    <div class="reminder-content">
+                        <h4>${item.sku} - Bin ${item.bin_no}</h4>
+                        <p style="margin: 5px 0;"><strong>Batch:</strong> ${item.batch_no}</p>
+                        <p style="margin: 5px 0;"><strong>Description:</strong> ${item.description}</p>
+                        <p style="margin: 5px 0; color: ${item.expire_days <= 7 ? '#f44336' : '#666'};"><strong>Expires in ${item.expire_days} days</strong></p>
+                    </div>
+                `;
+                
+                remindersList.appendChild(reminderItem);
+            });
+        } else {
+            remindersList.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">No items found</p>';
+        }
+    } catch (error) {
+        console.error('Error loading reminders:', error);
+        remindersList.innerHTML = '<p style="text-align: center; color: #f44336; padding: 20px;">⚠️ Error loading expiry reminders</p>';
+    }
 }
 
 // Load quick statistics

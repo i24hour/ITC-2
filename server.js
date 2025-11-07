@@ -1466,6 +1466,42 @@ app.post('/api/bins/dispatch', async (req, res) => {
   }
 });
 
+// Get expiry reminders for dashboard
+app.get('/api/inventory/expiry-reminders', async (req, res) => {
+  try {
+    const filter = req.query.filter || '15'; // '15' or 'all'
+    
+    let query = `
+      SELECT 
+        id, bin_no, sku, batch_no, cfc, description, uom, expire_days
+      FROM "Inventory"
+      WHERE expire_days IS NOT NULL AND cfc > 0
+    `;
+    
+    // Filter by last 15 days if specified
+    if (filter === '15') {
+      query += ` AND expire_days <= 15`;
+    }
+    
+    query += ` ORDER BY expire_days ASC`;
+    
+    const result = await db.query(query);
+    
+    res.json({
+      success: true,
+      items: result.rows,
+      count: result.rows.length,
+      filter: filter
+    });
+  } catch (error) {
+    console.error('Error fetching expiry reminders:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
+  }
+});
+
 // Get dashboard summary
 app.get('/api/reports/summary', async (req, res) => {
   try {

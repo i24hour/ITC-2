@@ -67,29 +67,15 @@
 
             <!-- Reminders -->
             <div class="dashboard-section reminders-section">
-                <h2>⚠️ Expiry Reminders</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h2>⚠️ Expiry Reminders</h2>
+                    <select id="expiry-filter" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; background: white;">
+                        <option value="15">Last 15 days</option>
+                        <option value="all">All</option>
+                    </select>
+                </div>
                 <div id="reminders-list" class="reminders-list">
-                    <div class="reminder-item urgent">
-                        <div class="reminder-icon">🔴</div>
-                        <div class="reminder-content">
-                            <h4>SKU005 - Bin A12</h4>
-                            <p>Expires in 2 days</p>
-                        </div>
-                    </div>
-                    <div class="reminder-item warning">
-                        <div class="reminder-icon">🟡</div>
-                        <div class="reminder-content">
-                            <h4>SKU012 - Bin B05</h4>
-                            <p>Expires in 5 days</p>
-                        </div>
-                    </div>
-                    <div class="reminder-item info">
-                        <div class="reminder-icon">🟢</div>
-                        <div class="reminder-content">
-                            <h4>SKU008 - Bin C20</h4>
-                            <p>Expires in 10 days</p>
-                        </div>
-                    </div>
+                    <p style="text-align: center; color: #666; padding: 20px;">Loading expiry reminders...</p>
                 </div>
             </div>
 
