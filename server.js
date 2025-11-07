@@ -2925,6 +2925,100 @@ app.post('/api/admin/update-expire-days', async (req, res) => {
   }
 });
 
+// ==================== BATCH NUMBER COLUMN API ====================
+
+app.post('/api/admin/add-batch-numbers', async (req, res) => {
+  const client = await db.getClient();
+  
+  try {
+    console.log('📦 Adding batch_no column...');
+    
+    const XLSX = require('xlsx');
+    const path = require('path');
+    
+    // Read Excel file
+    const excelPath = path.join(__dirname, 'BATCHWISE AGE ANALYSIS REPORT.XLS');
+    const workbook = XLSX.readFile(excelPath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    
+    // Extract SKU and Batch numbers
+    const skuBatchMap = new Map();
+    
+    for (let i = 8; i < data.length; i++) {
+      const row = data[i];
+      const sku = row[3]?.toString().trim(); // Column D (index 3)
+      const batchNo = row[4]?.toString().trim(); // Column E (index 4)
+      
+      if (sku && batchNo) {
+        if (!skuBatchMap.has(sku)) {
+          skuBatchMap.set(sku, []);
+        }
+        // Avoid duplicates
+        if (!skuBatchMap.get(sku).includes(batchNo)) {
+          skuBatchMap.get(sku).push(batchNo);
+        }
+      }
+    }
+    
+    await client.query('BEGIN');
+    
+    // Add batch_no column
+    await client.query(`
+      ALTER TABLE "Cleaned_FG_Master_file" 
+      ADD COLUMN IF NOT EXISTS batch_no TEXT DEFAULT NULL
+    `);
+    
+    // Update values - store multiple batches as comma-separated
+    let updatedCount = 0;
+    for (const [sku, batches] of skuBatchMap) {
+      const batchString = batches.join(',');
+      const result = await client.query(
+        `UPDATE "Cleaned_FG_Master_file" 
+         SET batch_no = $1 
+         WHERE sku = $2`,
+        [batchString, sku]
+      );
+      if (result.rowCount > 0) updatedCount++;
+    }
+    
+    await client.query('COMMIT');
+    
+    // Get stats
+    const stats = await client.query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(batch_no) as with_batch
+      FROM "Cleaned_FG_Master_file"
+    `);
+    
+    res.json({
+      success: true,
+      message: 'batch_no column added successfully',
+      stats: {
+        totalSKUs: parseInt(stats.rows[0].total),
+        skusWithBatch: parseInt(stats.rows[0].with_batch),
+        skusUpdated: updatedCount,
+        uniqueSKUs: skuBatchMap.size
+      }
+    });
+    
+    console.log(`✅ Batch numbers added: ${updatedCount} SKUs`);
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Batch number update failed:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      stack: error.stack 
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== SERVER START ====================
 
 // Global error handlers to prevent crashes
