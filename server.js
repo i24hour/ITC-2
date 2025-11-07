@@ -1299,46 +1299,49 @@ app.post('/api/bins/update', async (req, res) => {
     let newCFC = parseInt(quantity);
     
     if (useNewStructure) {
-      // NEW STRUCTURE: Use "Inventory" table
-      const existingResult = await client.query(
-        `SELECT * FROM "Inventory" WHERE bin_no = $1 AND sku = $2`,
-        [binId, sku]
+      // NEW STRUCTURE: Use "Inventory" table with batch-based logic
+      // Generate today's batch number
+      const todayBatch = generateBatchNumber();
+      
+      // Check if this bin + today's batch already exists
+      const existingBatchResult = await client.query(
+        `SELECT * FROM "Inventory" WHERE bin_no = $1 AND batch_no = $2`,
+        [binId, todayBatch]
       );
       
-      if (existingResult.rows.length > 0) {
-        // Update existing row
-        currentCFC = existingResult.rows[0].cfc;
+      if (existingBatchResult.rows.length > 0) {
+        // Today's batch exists in this bin - update it
+        currentCFC = existingBatchResult.rows[0].cfc;
         newCFC = currentCFC + parseInt(quantity);
-        const batchNo = existingResult.rows[0].batch_no;
         
         await client.query(
           `UPDATE "Inventory" 
            SET cfc = $1, updated_at = CURRENT_TIMESTAMP
-           WHERE bin_no = $2 AND sku = $3`,
-          [newCFC, binId, sku]
+           WHERE bin_no = $2 AND batch_no = $3`,
+          [newCFC, binId, todayBatch]
         );
         
         // Log to Incoming table
         await client.query(
           `INSERT INTO "Incoming" (sku, batch_no, description, quantity, weight, uom, bin_no, operator_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [sku, batchNo, description, parseInt(quantity), weight, uom, binId, null]
+          [sku, todayBatch, description, parseInt(quantity), weight, uom, binId, null]
         );
       } else {
-        // Insert new row with new batch format: Z05NOV25
-        const batchNo = generateBatchNumber();
+        // Today's batch doesn't exist in this bin - create new row
+        newCFC = parseInt(quantity);
         
         await client.query(
-          `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom, weight)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [binId, sku, batchNo, newCFC, description, uom, weight]
+          `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [binId, sku, todayBatch, newCFC, description, uom]
         );
         
         // Also log to Incoming table
         await client.query(
           `INSERT INTO "Incoming" (sku, batch_no, description, quantity, weight, uom, bin_no, operator_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [sku, batchNo, description, parseInt(quantity), weight, uom, binId, null]
+          [sku, todayBatch, description, parseInt(quantity), weight, uom, binId, null]
         );
       }
     } else {
@@ -2349,46 +2352,49 @@ app.post('/api/bins/scan', async (req, res) => {
       }
       
       if (useNewStructure) {
-        // NEW STRUCTURE: Use "Inventory" table
+        // NEW STRUCTURE: Use "Inventory" table with batch-based logic
+        // Generate today's batch number
+        const todayBatch = generateBatchNumber();
+        
+        // Check if this bin + today's batch already exists
         const invRes = await client.query(
-          `SELECT * FROM "Inventory" WHERE bin_no = $1 AND sku = $2 FOR UPDATE`,
-          [binId, task.sku]
+          `SELECT * FROM "Inventory" WHERE bin_no = $1 AND batch_no = $2 FOR UPDATE`,
+          [binId, todayBatch]
         );
 
         if (invRes.rows.length > 0) {
-          // Update existing row
+          // Today's batch exists in this bin - update it
           currentCFC = invRes.rows[0].cfc;
           newCFC = currentCFC + qtyToProcess;
-          const batchNo = invRes.rows[0].batch_no;
 
           await client.query(
             `UPDATE "Inventory" 
              SET cfc = $1, updated_at = CURRENT_TIMESTAMP
-             WHERE bin_no = $2 AND sku = $3`,
-            [newCFC, binId, task.sku]
+             WHERE bin_no = $2 AND batch_no = $3`,
+            [newCFC, binId, todayBatch]
           );
           
           // Log to Incoming table
           await client.query(
             `INSERT INTO "Incoming" (sku, batch_no, description, quantity, weight, uom, bin_no, operator_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [task.sku, batchNo, description, qtyToProcess, task.weight || null, uom, binId, sessionValidation.session.operator_id || null]
+            [task.sku, todayBatch, description, qtyToProcess, task.weight || null, uom, binId, sessionValidation.session.operator_id || null]
           );
         } else {
-          // Insert new row with new batch format: Z05NOV25
-          const batchNo = generateBatchNumber();
+          // Today's batch doesn't exist in this bin - create new row
+          newCFC = qtyToProcess;
           
           await client.query(
             `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom)
              VALUES ($1, $2, $3, $4, $5, $6)`,
-            [binId, task.sku, batchNo, newCFC, description, uom]
+            [binId, task.sku, todayBatch, newCFC, description, uom]
           );
           
           // Log to Incoming table
           await client.query(
             `INSERT INTO "Incoming" (sku, batch_no, description, quantity, weight, uom, bin_no, operator_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [task.sku, batchNo, description, qtyToProcess, task.weight || null, uom, binId, sessionValidation.session.operator_id || null]
+            [task.sku, todayBatch, description, qtyToProcess, task.weight || null, uom, binId, sessionValidation.session.operator_id || null]
           );
         }
       } else {
