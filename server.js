@@ -2949,7 +2949,7 @@ app.post('/api/admin/add-batch-numbers', async (req, res) => {
     for (let i = 8; i < data.length; i++) {
       const row = data[i];
       const sku = row[3]?.toString().trim(); // Column D (index 3)
-      const batchNo = row[4]?.toString().trim(); // Column E (index 4)
+      const batchNo = row[6]?.toString().trim(); // Column G (index 6) - Batch No.
       
       if (sku && batchNo) {
         if (!skuBatchMap.has(sku)) {
