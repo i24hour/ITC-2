@@ -2931,6 +2931,53 @@ app.post('/api/admin/update-expire-days', async (req, res) => {
   }
 });
 
+// ==================== REMOVE BATCH NUMBER COLUMN API ====================
+
+app.post('/api/admin/remove-batch-column', async (req, res) => {
+  const client = await db.getClient();
+  
+  try {
+    console.log('🗑️ Removing batch_no column from Cleaned_FG_Master_file...');
+    
+    await client.query('BEGIN');
+    
+    // Drop batch_no column
+    await client.query(`
+      ALTER TABLE "Cleaned_FG_Master_file" 
+      DROP COLUMN IF EXISTS batch_no
+    `);
+    
+    await client.query('COMMIT');
+    
+    // Get updated table info
+    const stats = await client.query(`
+      SELECT COUNT(*) as total
+      FROM "Cleaned_FG_Master_file"
+    `);
+    
+    res.json({
+      success: true,
+      message: 'batch_no column removed successfully',
+      stats: {
+        totalSKUs: parseInt(stats.rows[0].total)
+      }
+    });
+    
+    console.log('✅ batch_no column removed');
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Failed to remove batch_no column:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      stack: error.stack 
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== BATCH NUMBER COLUMN API ====================
 
 app.post('/api/admin/add-batch-numbers', async (req, res) => {
