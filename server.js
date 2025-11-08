@@ -3252,6 +3252,64 @@ app.post('/api/admin/add-expire-days-column', async (req, res) => {
   }
 });
 
+// ==================== CREATE SUPERVISORS TABLE API ====================
+
+app.post('/api/admin/create-supervisors-table', async (req, res) => {
+  const client = await db.getClient();
+  
+  try {
+    console.log('👔 Creating Supervisors table...');
+    
+    await client.query('BEGIN');
+    
+    // Create Supervisors table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "Supervisors" (
+        supervisor_id VARCHAR(10) PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        email VARCHAR(100) UNIQUE NOT NULL,
+        password_hash VARCHAR(255),
+        phone VARCHAR(20),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_login TIMESTAMP
+      )
+    `);
+    
+    // Insert default supervisor
+    await client.query(`
+      INSERT INTO "Supervisors" (supervisor_id, name, email, password_hash, phone)
+      VALUES ('SUP001', 'Supervisor Admin', 'supervisor@itc.com', 'supervisor123', '9876543210')
+      ON CONFLICT (email) DO NOTHING
+    `);
+    
+    await client.query('COMMIT');
+    
+    // Get count
+    const stats = await client.query(`SELECT COUNT(*) as total FROM "Supervisors"`);
+    
+    res.json({
+      success: true,
+      message: 'Supervisors table created successfully',
+      stats: {
+        totalSupervisors: parseInt(stats.rows[0].total)
+      }
+    });
+    
+    console.log('✅ Supervisors table created with default supervisor');
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Supervisors table creation failed:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      stack: error.stack 
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== SERVER START ====================
 
 // Global error handlers to prevent crashes
