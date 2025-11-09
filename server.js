@@ -1318,15 +1318,17 @@ app.post('/api/bins/update', async (req, res) => {
     let useNewStructure = false;
     
     // Try to fetch SKU details from Cleaned_FG_Master_file (new structure)
+    let expireInDays = null;
     try {
       const skuResult = await client.query(
-        `SELECT description, uom FROM "Cleaned_FG_Master_file" WHERE sku = $1`,
+        `SELECT description, uom, expire_in_days FROM "Cleaned_FG_Master_file" WHERE sku = $1`,
         [sku]
       );
       
       if (skuResult.rows.length > 0) {
         description = skuResult.rows[0].description;
         uom = skuResult.rows[0].uom;
+        expireInDays = skuResult.rows[0].expire_in_days;
         useNewStructure = true;
       }
     } catch (err) {
@@ -1371,9 +1373,9 @@ app.post('/api/bins/update', async (req, res) => {
         newCFC = parseInt(quantity);
         
         await client.query(
-          `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [binId, sku, todayBatch, newCFC, description, uom]
+          `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom, expire_days)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [binId, sku, todayBatch, newCFC, description, uom, expireInDays]
         );
         
         // Also log to Incoming table
@@ -2411,14 +2413,16 @@ app.post('/api/bins/scan', async (req, res) => {
       let useNewStructure = false;
       
       // Try to get SKU details from Cleaned_FG_Master_file (new structure)
+      let expireInDays = null;
       try {
         const skuResult = await client.query(
-          `SELECT description, uom FROM "Cleaned_FG_Master_file" WHERE sku = $1`,
+          `SELECT description, uom, expire_in_days FROM "Cleaned_FG_Master_file" WHERE sku = $1`,
           [task.sku]
         );
         if (skuResult.rows.length > 0) {
           description = skuResult.rows[0].description;
           uom = skuResult.rows[0].uom;
+          expireInDays = skuResult.rows[0].expire_in_days;
           useNewStructure = true;
         }
       } catch (err) {
@@ -2460,9 +2464,9 @@ app.post('/api/bins/scan', async (req, res) => {
           newCFC = qtyToProcess;
           
           await client.query(
-            `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [binId, task.sku, todayBatch, newCFC, description, uom]
+            `INSERT INTO "Inventory" (bin_no, sku, batch_no, cfc, description, uom, expire_days)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [binId, task.sku, todayBatch, newCFC, description, uom, expireInDays]
           );
           
           // Log to Incoming table
