@@ -1144,12 +1144,13 @@ app.get('/api/bins/available', async (req, res) => {
     
     // Try new table structure first
     try {
-      // Get bins with the requested SKU from Inventory
+      // Get bins with the requested SKU from Inventory (grouped by bin_no to combine batches)
       inventoryResult = await db.query(
-        `SELECT bin_no, sku, cfc, batch_no, created_at 
+        `SELECT bin_no, sku, SUM(cfc) as cfc, MIN(created_at) as created_at
          FROM "Inventory" 
          WHERE sku = $1 
-         ORDER BY created_at ASC`,
+         GROUP BY bin_no, sku
+         ORDER BY MIN(created_at) ASC`,
         [sku]
       );
       
@@ -1166,10 +1167,11 @@ app.get('/api/bins/available', async (req, res) => {
       // Fallback to old table structure
       console.log('New tables not found, using old inventory table');
       inventoryResult = await db.query(
-        `SELECT bin_no, sku, cfc, batch_no, created_at 
+        `SELECT bin_no, sku, SUM(cfc) as cfc, MIN(created_at) as created_at
          FROM inventory 
          WHERE sku = $1 
-         ORDER BY created_at ASC`,
+         GROUP BY bin_no, sku
+         ORDER BY MIN(created_at) ASC`,
         [sku]
       );
       emptyBinsResult = { rows: [] }; // No separate bins table in old structure
@@ -1180,9 +1182,9 @@ app.get('/api/bins/available', async (req, res) => {
     const emptyBins = [];
     const capacity = 240; // Maximum capacity per bin (240 CFC)
     
-    // Process bins from Inventory (same SKU)
+    // Process bins from Inventory (same SKU, grouped by bin)
     inventoryResult.rows.forEach(row => {
-      const currentQty = row.cfc;
+      const currentQty = row.cfc; // Now this is SUM of all batches in this bin
       const available = capacity - currentQty;
       
       const binData = {
@@ -1190,8 +1192,8 @@ app.get('/api/bins/available', async (req, res) => {
         sku: sku,
         current: currentQty,
         capacity: capacity,
-        available: Math.max(0, available),
-        batch: row.batch_no
+        available: Math.max(0, available)
+        // batch field removed because multiple batches are combined
       };
       
       if (currentQty === 0) {
