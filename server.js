@@ -3346,20 +3346,28 @@ app.post('/api/supervisor/add-sku', async (req, res) => {
     
     await client.query('BEGIN');
     
-    // Insert new SKU
+    // Insert new SKU into master file
     await client.query(
       `INSERT INTO "Cleaned_FG_Master_file" (sku, description, uom, expire_in_days, created_at)
        VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
       [sku.toUpperCase(), description, parseFloat(uom), expireInDays ? parseInt(expireInDays) : null]
     );
     
+    // Also add to active_skus table (so it appears in dropdowns immediately)
+    await client.query(
+      `INSERT INTO active_skus (sku, is_active)
+       VALUES ($1, true)
+       ON CONFLICT (sku) DO UPDATE SET is_active = true`,
+      [sku.toUpperCase()]
+    );
+    
     await client.query('COMMIT');
     
-    console.log(`✅ New SKU added: ${sku.toUpperCase()}`);
+    console.log(`✅ New SKU added: ${sku.toUpperCase()} (active)`);
     
     res.json({
       success: true,
-      message: `SKU '${sku.toUpperCase()}' added successfully`,
+      message: `SKU '${sku.toUpperCase()}' added successfully and is now active in dropdowns`,
       sku: {
         sku: sku.toUpperCase(),
         description,
