@@ -50,12 +50,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 console.log('✅ Login successful with server session, Operator ID:', result.user.operatorId);
                 
-                // Redirect based on role
-                if (result.user.role === 'supervisor') {
-                    window.location.href = 'supervisor.html';
-                } else {
-                    window.location.href = 'dashboard.html';
-                }
+                // Redirect to dashboard (supervisor panel will show based on role)
+                window.location.href = 'dashboard.html';
             } else {
                 alert('❌ Login failed: ' + (result.error || 'Invalid credentials'));
             }
