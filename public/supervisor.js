@@ -35,6 +35,7 @@ async function initSupervisorPanel() {
     // Setup event listeners
     setupSKUManagement();
     setupOperatorCreation();
+    setupAddSKUForm();
 }
 
 function setupOperatorCreation() {
@@ -224,6 +225,65 @@ function setupSKUManagement() {
         } catch (error) {
             console.error('Error saving SKU list:', error);
             alert('Error saving SKU list. Please try again.');
+        }
+    });
+}
+
+function setupAddSKUForm() {
+    const form = document.getElementById('add-sku-form');
+    
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const sku = document.getElementById('new-sku-code').value.trim().toUpperCase();
+        const description = document.getElementById('new-sku-description').value.trim();
+        const uom = document.getElementById('new-sku-uom').value.trim();
+        const expireInDays = document.getElementById('new-sku-expire').value.trim();
+        
+        // Validation
+        if (!sku || !description || !uom) {
+            alert('⚠️ Please fill in all required fields (SKU, Description, UOM)');
+            return;
+        }
+        
+        if (parseFloat(uom) <= 0) {
+            alert('⚠️ UOM must be greater than 0');
+            return;
+        }
+        
+        if (expireInDays && parseInt(expireInDays) < 0) {
+            alert('⚠️ Expire in days cannot be negative');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/supervisor/add-sku', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sku,
+                    description,
+                    uom: parseFloat(uom),
+                    expireInDays: expireInDays ? parseInt(expireInDays) : null
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                alert(`✅ SKU Added Successfully!\n\nSKU: ${result.sku.sku}\nDescription: ${result.sku.description}\nUOM: ${result.sku.uom} kg\nExpire In: ${result.sku.expire_in_days || 'N/A'} days`);
+                
+                // Reset form
+                form.reset();
+                
+                // Reload SKU list
+                await loadAllSKUs();
+            } else {
+                alert('❌ Error: ' + (result.error || 'Failed to add SKU'));
+            }
+        } catch (error) {
+            console.error('Error adding SKU:', error);
+            alert('❌ Network error. Please check your connection and try again.');
         }
     });
 }

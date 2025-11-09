@@ -3316,6 +3316,70 @@ app.post('/api/admin/create-supervisors-table', async (req, res) => {
   }
 });
 
+// Add new SKU to Cleaned_FG_Master_file (Supervisor only)
+app.post('/api/supervisor/add-sku', async (req, res) => {
+  const client = await db.getClient();
+  
+  try {
+    const { sku, description, uom, expireInDays } = req.body;
+    
+    // Validate required fields
+    if (!sku || !description || !uom) {
+      return res.status(400).json({
+        success: false,
+        error: 'SKU, description, and UOM are required fields'
+      });
+    }
+    
+    // Check if SKU already exists
+    const existingCheck = await client.query(
+      `SELECT sku FROM "Cleaned_FG_Master_file" WHERE sku = $1`,
+      [sku.toUpperCase()]
+    );
+    
+    if (existingCheck.rows.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: `SKU '${sku}' already exists in the master list`
+      });
+    }
+    
+    await client.query('BEGIN');
+    
+    // Insert new SKU
+    await client.query(
+      `INSERT INTO "Cleaned_FG_Master_file" (sku, description, uom, expire_in_days, created_at)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
+      [sku.toUpperCase(), description, parseFloat(uom), expireInDays ? parseInt(expireInDays) : null]
+    );
+    
+    await client.query('COMMIT');
+    
+    console.log(`✅ New SKU added: ${sku.toUpperCase()}`);
+    
+    res.json({
+      success: true,
+      message: `SKU '${sku.toUpperCase()}' added successfully`,
+      sku: {
+        sku: sku.toUpperCase(),
+        description,
+        uom: parseFloat(uom),
+        expire_in_days: expireInDays ? parseInt(expireInDays) : null
+      }
+    });
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Failed to add SKU:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== SERVER START ====================
 
 // Global error handlers to prevent crashes
