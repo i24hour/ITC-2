@@ -1691,6 +1691,49 @@ app.post('/api/supervisor/active-skus', async (req, res) => {
   }
 });
 
+// Sync all SKUs from Cleaned_FG_Master_file to active_skus (force sync)
+app.post('/api/admin/sync-active-skus', async (req, res) => {
+  const client = await db.getClient();
+  
+  try {
+    console.log('🔄 Syncing all SKUs from Cleaned_FG_Master_file to active_skus...');
+    
+    // Create table if not exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS active_skus (
+        sku VARCHAR(50) PRIMARY KEY,
+        is_active BOOLEAN DEFAULT true
+      );
+    `);
+    
+    // Insert all SKUs from master file (including FXC1100PB)
+    const result = await client.query(`
+      INSERT INTO active_skus (sku, is_active)
+      SELECT DISTINCT sku, true
+      FROM "Cleaned_FG_Master_file"
+      ON CONFLICT (sku) DO UPDATE SET is_active = true
+      RETURNING sku
+    `);
+    
+    console.log(`✅ Synced ${result.rowCount} SKUs to active_skus table`);
+    
+    res.json({
+      success: true,
+      message: `Successfully synced ${result.rowCount} SKUs`,
+      count: result.rowCount
+    });
+    
+  } catch (error) {
+    console.error('❌ Error syncing SKUs:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // Supervisor endpoint to create operator accounts
 app.post('/api/supervisor/create-operator', async (req, res) => {
   const client = await db.getClient();
