@@ -1,0 +1,1 @@
+{"error":"current transaction is aborted, commands ignored until end of transaction block","stack":"error: current transaction is aborted, commands ignored until end of transaction block\n    at /node_modules/pg/lib/client.js:545:17\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async /home/site/wwwroot/server.js:424:24"}

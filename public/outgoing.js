@@ -21,8 +21,58 @@ document.addEventListener('DOMContentLoaded', () => {
         window.location.href = 'index.html';
     });
 
+    // Check if resuming a pending task
+    checkAndResumePendingTaskOutgoing();
+
     initStep1Outgoing();
 });
+
+// Check and resume pending task if coming from dashboard
+async function checkAndResumePendingTaskOutgoing() {
+    const resumeTask = localStorage.getItem('resumeTask');
+    if (!resumeTask) return;
+    
+    try {
+        const task = JSON.parse(resumeTask);
+        localStorage.removeItem('resumeTask'); // Clear immediately
+        
+        if (task.task_type === 'outgoing' && task.sku) {
+            // Pre-fill the form
+            document.getElementById('sku-search').value = task.sku || '';
+            document.getElementById('dispatch-qty').value = task.cfc || '';
+            document.getElementById('batch-number').value = task.batch_no || '';
+            
+            // Fetch SKU details
+            if (task.sku) {
+                await fetchAndDisplaySKUDetailsOutgoing(task.sku);
+            }
+            
+            // Show notification
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #2196F3;
+                color: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                z-index: 10000;
+                font-weight: bold;
+            `;
+            notification.textContent = '✅ Task resumed! Please complete within time limit.';
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+        }
+    } catch (error) {
+        console.error('Error resuming task:', error);
+        localStorage.removeItem('resumeTask');
+    }
+}
 
 // ===== STEP 1: Search SKU =====
 function initStep1Outgoing() {
@@ -341,7 +391,10 @@ function updateProceedButton() {
 }
 
 function initStep2Outgoing() {
-    document.getElementById('back-to-search').addEventListener('click', () => {
+    document.getElementById('back-to-search').addEventListener('click', async () => {
+        // Save as pending task before going back
+        await savePendingTaskOutgoingFromStep2();
+        
         document.getElementById('step2-outgoing').classList.remove('active');
         document.getElementById('step1-outgoing').classList.add('active');
         fifoBins = [];
@@ -834,16 +887,118 @@ async function completeOutgoingTask() {
 }
 
 function initStep3Outgoing() {
-    document.getElementById('cancel-dispatch').addEventListener('click', () => {
+    document.getElementById('cancel-dispatch').addEventListener('click', async () => {
+        // Save as pending task before canceling
+        await savePendingTaskOutgoing();
+        
         if (html5QrCodeOut) {
             html5QrCodeOut.stop();
         }
         window.location.href = 'dashboard.html';
     });
     
-    document.getElementById('complete-outgoing').addEventListener('click', () => {
+    document.getElementById('complete-outgoing').addEventListener('click', async () => {
+        // Delete pending task if exists
+        await deletePendingTaskOutgoing();
+        
         // Save to history
-        // TODO: API call to save transaction
         window.location.href = 'dashboard.html';
     });
 }
+
+// Save pending task for outgoing
+async function savePendingTaskOutgoing() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user || !user.operatorId) return;
+    
+    try {
+        const response = await fetch('/api/pending-tasks/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                operatorId: user.operatorId,
+                taskType: 'outgoing',
+                sku: outgoingData.sku,
+                binNo: fifoBins.map(b => b.bin_no).join(', '),
+                cfc: outgoingData.quantity,
+                batchNo: outgoingData.batch
+            })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            console.log('✅ Pending outgoing task saved:', result.task);
+        }
+    } catch (error) {
+        console.error('Error saving pending outgoing task:', error);
+    }
+}
+
+// Delete pending task after completion
+async function deletePendingTaskOutgoing() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user || !user.operatorId) return;
+    
+    try {
+        // Find and cancel pending tasks for this operator and SKU
+        const listResponse = await fetch(`/api/pending-tasks/list?operatorId=${user.operatorId}`);
+        const listData = await listResponse.json();
+        
+        if (listData.success && listData.tasks) {
+            const matchingTask = listData.tasks.find(t => 
+                t.task_type === 'outgoing' && 
+                t.sku === outgoingData.sku
+            );
+            
+            if (matchingTask) {
+                await fetch('/api/pending-tasks/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        taskId: matchingTask.id
+                    })
+                });
+                console.log('✅ Pending outgoing task deleted after completion');
+            }
+        }
+    } catch (error) {
+        console.error('Error deleting pending outgoing task:', error);
+    }
+}
+
+// Save pending task from step 2 (before going back)
+async function savePendingTaskOutgoingFromStep2() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user || !user.operatorId) return;
+    
+    // Get current form data
+    const sku = outgoingData.sku || document.getElementById('sku-search').value.trim();
+    const quantity = outgoingData.quantity || parseInt(document.getElementById('dispatch-qty').value) || 0;
+    const batch = outgoingData.batch || document.getElementById('batch-number').value.trim();
+    
+    // Only save if there's meaningful data
+    if (!sku || quantity === 0) return;
+    
+    try {
+        const response = await fetch('/api/pending-tasks/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                operatorId: user.operatorId,
+                taskType: 'outgoing',
+                sku: sku,
+                binNo: null, // Not selected yet
+                cfc: quantity,
+                batchNo: batch
+            })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            console.log('✅ Pending outgoing task saved from step 2:', result.task);
+        }
+    } catch (error) {
+        console.error('Error saving pending outgoing task from step 2:', error);
+    }
+}
+

@@ -37,6 +37,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load dashboard data
     loadTaskHistory();
     loadReminders();
+    loadPendingTasks();
+
+    // Refresh pending tasks every 10 seconds
+    setInterval(loadPendingTasks, 10000);
 
     // Expiry filter change event
     const expiryFilter = document.getElementById('expiry-filter');
@@ -245,5 +249,141 @@ async function loadStats() {
         console.log('Statistics loaded:', data);
     } catch (error) {
         console.error('Error loading statistics:', error);
+    }
+}
+
+// Load and display pending tasks with countdown timers
+async function loadPendingTasks() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user || !user.operatorId) return;
+
+    const pendingSection = document.getElementById('pending-tasks-section');
+    const pendingList = document.getElementById('pending-tasks-list');
+    
+    try {
+        const response = await fetch(`/api/pending-tasks/list?operatorId=${user.operatorId}`);
+        const data = await response.json();
+        
+        if (data.success && data.tasks && data.tasks.length > 0) {
+            // Show section
+            pendingSection.style.display = 'block';
+            
+            // Clear existing content
+            pendingList.innerHTML = '';
+            
+            // Display each task
+            data.tasks.forEach(task => {
+                const taskCard = document.createElement('div');
+                taskCard.className = 'pending-task-card';
+                taskCard.style.cssText = `
+                    background: white;
+                    border-left: 4px solid ${task.task_type === 'incoming' ? '#4CAF50' : '#2196F3'};
+                    border-radius: 8px;
+                    padding: 15px;
+                    margin-bottom: 10px;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                `;
+                
+                // Calculate minutes and seconds
+                const totalSeconds = Math.max(0, Math.floor(task.seconds_remaining));
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = totalSeconds % 60;
+                
+                taskCard.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="background: ${task.task_type === 'incoming' ? '#4CAF50' : '#2196F3'}; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                            ${task.task_type === 'incoming' ? '📥 INCOMING' : '📤 OUTGOING'}
+                        </span>
+                        <span class="timer" data-seconds="${totalSeconds}" style="font-size: 18px; font-weight: bold; color: ${totalSeconds < 300 ? '#f44336' : '#4CAF50'};">
+                            ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}
+                        </span>
+                    </div>
+                    <div style="font-size: 14px; color: #333;">
+                        <strong>SKU:</strong> ${task.sku || 'N/A'}<br>
+                        <strong>Bin:</strong> ${task.bin_no || 'N/A'}<br>
+                        <strong>Quantity:</strong> ${task.cfc || 0} units
+                    </div>
+                    <div style="margin-top: 10px; font-size: 12px; color: #666;">
+                        Click to resume this task
+                    </div>
+                `;
+                
+                // Hover effect
+                taskCard.addEventListener('mouseenter', () => {
+                    taskCard.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+                    taskCard.style.transform = 'translateY(-2px)';
+                });
+                taskCard.addEventListener('mouseleave', () => {
+                    taskCard.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                    taskCard.style.transform = 'translateY(0)';
+                });
+                
+                // Click to resume task
+                taskCard.addEventListener('click', () => resumeTask(task));
+                
+                pendingList.appendChild(taskCard);
+            });
+            
+            // Update all timers every second
+            updateTimers();
+            
+        } else {
+            // Hide section if no tasks
+            pendingSection.style.display = 'none';
+        }
+        
+    } catch (error) {
+        console.error('Error loading pending tasks:', error);
+        pendingSection.style.display = 'none';
+    }
+}
+
+// Update countdown timers
+function updateTimers() {
+    const timers = document.querySelectorAll('.timer');
+    
+    timers.forEach(timer => {
+        let seconds = parseInt(timer.dataset.seconds);
+        
+        if (seconds > 0) {
+            seconds--;
+            timer.dataset.seconds = seconds;
+            
+            const minutes = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            timer.textContent = `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            
+            // Change color when less than 5 minutes
+            if (seconds < 300) {
+                timer.style.color = '#f44336';
+            }
+            
+            // Remove task when expired
+            if (seconds === 0) {
+                timer.closest('.pending-task-card').style.opacity = '0.5';
+                timer.textContent = 'EXPIRED';
+                setTimeout(() => {
+                    loadPendingTasks(); // Reload to remove expired tasks
+                }, 2000);
+            }
+        }
+    });
+    
+    // Continue updating every second
+    setTimeout(updateTimers, 1000);
+}
+
+// Resume a pending task
+function resumeTask(task) {
+    // Store task data in localStorage
+    localStorage.setItem('resumeTask', JSON.stringify(task));
+    
+    // Redirect to appropriate page
+    if (task.task_type === 'incoming') {
+        window.location.href = '/incoming.html';
+    } else if (task.task_type === 'outgoing') {
+        window.location.href = '/outgoing.html';
     }
 }

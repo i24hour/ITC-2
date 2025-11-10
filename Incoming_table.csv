@@ -1,0 +1,9 @@
+id,sku,batch_no,description,quantity,weight,uom,bin_no,operator_id,incoming_date,status
+"8","FXC10005PB","Z04NOV25","48560 BINGO! CHIPS RS.5 SALTED","10",,"2.520","A03","OP001","Fri Nov 07 2025 10:33:05 GMT+0530 (India Standard Time)","completed"
+"7","FXC10005PB","Z04NOV25","48560 BINGO! CHIPS RS.5 SALTED","10",,"2.520","A03","OP001","Thu Nov 06 2025 06:22:00 GMT+0530 (India Standard Time)","completed"
+"6","FXC10005PB","Z04NOV25","48560 BINGO! CHIPS RS.5 SALTED","10",,"2.520","A03","OP001","Wed Nov 05 2025 15:34:39 GMT+0530 (India Standard Time)","completed"
+"5","FXC10005PB","Z04NOV25","48560 BINGO! CHIPS RS.5 SALTED","10",,"2.520","A03","OP001","Wed Nov 05 2025 15:33:30 GMT+0530 (India Standard Time)","completed"
+"4","FXC10005PB","Z04NOV25","48560 BINGO! CHIPS RS.5 SALTED","50",,"2.520","A03","OP001","Wed Nov 05 2025 14:52:44 GMT+0530 (India Standard Time)","completed"
+"3","FXC10005PB","Z05NOV25","48560 BINGO! CHIPS RS.5 SALTED","50",,"2.520","A04","OP002","Wed Nov 05 2025 02:19:59 GMT+0530 (India Standard Time)","completed"
+"2","FXC10005PB","Z04NOV25","48560 BINGO! CHIPS RS.5 SALTED","50",,"2.520","A03","OP002","Wed Nov 05 2025 00:37:17 GMT+0530 (India Standard Time)","completed"
+"1","FXC10005SLA","Z05NOV25","48560 BINGO! CHIPS RS.5 SALTED","100",,"2.688","A05","OP001","Tue Nov 04 2025 23:20:08 GMT+0530 (India Standard Time)","completed"

@@ -1,0 +1,2 @@
+supervisor_id,name,email,password_hash,phone,created_at,last_login
+SUP001,Supervisor Admin,supervisor@itc.com,supervisor123,9876543210,2025-11-08T09:25:34.830Z,
