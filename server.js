@@ -280,6 +280,34 @@ app.post('/api/admin/migrate-structure', async (req, res) => {
     `);
     results.inventoryCreated = true;
     
+    // Step 2.5: Create Pending_Tasks table (for incomplete incoming/outgoing tasks)
+    console.log('📦 Creating Pending_Tasks table...');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "Pending_Tasks" (
+        id SERIAL PRIMARY KEY,
+        operator_id VARCHAR(20) NOT NULL,
+        task_type VARCHAR(20) NOT NULL CHECK (task_type IN ('incoming', 'outgoing')),
+        sku VARCHAR(50) NOT NULL,
+        bin_no VARCHAR(20) NOT NULL,
+        cfc INTEGER NOT NULL,
+        weight DECIMAL(10,2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'expired'))
+      )
+    `);
+    
+    // Create index for faster queries
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_pending_tasks_expires 
+      ON "Pending_Tasks" (expires_at)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_pending_tasks_operator 
+      ON "Pending_Tasks" (operator_id, status)
+    `);
+    console.log('✅ Pending_Tasks table created');
+    
     // Step 3: Migrate data from old inventory table to new Inventory table
     console.log('🔄 Migrating data from old inventory table...');
     const checkOldTable = await client.query(`
@@ -1138,9 +1166,21 @@ app.get('/api/sku-details/:sku', async (req, res) => {
 // Get available bins for incoming inventory
 app.get('/api/bins/available', async (req, res) => {
   try {
-    const { sku } = req.query;
+    const { sku, taskType } = req.query; // taskType = 'incoming' or 'outgoing'
     
-    let inventoryResult, emptyBinsResult;
+    let inventoryResult, emptyBinsResult, lockedBins = [];
+    
+    // Get locked bins (bins with pending tasks for this task type)
+    if (taskType) {
+      const lockedResult = await db.query(`
+        SELECT DISTINCT bin_no
+        FROM "Pending_Tasks"
+        WHERE task_type = $1 AND status = 'pending' AND expires_at > NOW()
+      `, [taskType]);
+      
+      lockedBins = lockedResult.rows.map(r => r.bin_no);
+      console.log(`🔒 Locked bins for ${taskType}:`, lockedBins);
+    }
     
     // Try new table structure first
     try {
@@ -1183,7 +1223,14 @@ app.get('/api/bins/available', async (req, res) => {
     const capacity = 240; // Maximum capacity per bin (240 CFC)
     
     // Process bins from Inventory (same SKU, grouped by bin)
+    // FILTER OUT LOCKED BINS
     inventoryResult.rows.forEach(row => {
+      // Skip locked bins
+      if (lockedBins.includes(row.bin_no)) {
+        console.log(`⏭️ Skipping locked bin: ${row.bin_no}`);
+        return;
+      }
+      
       const currentQty = row.cfc; // Now this is SUM of all batches in this bin
       const available = capacity - currentQty;
       
@@ -1206,7 +1253,14 @@ app.get('/api/bins/available', async (req, res) => {
     });
     
     // Add completely empty bins (not in Inventory at all)
+    // FILTER OUT LOCKED BINS
     emptyBinsResult.rows.forEach(row => {
+      // Skip locked bins
+      if (lockedBins.includes(row.bin_no)) {
+        console.log(`⏭️ Skipping locked empty bin: ${row.bin_no}`);
+        return;
+      }
+      
       emptyBins.push({
         id: row.bin_no,
         sku: null,
@@ -1303,6 +1357,125 @@ app.get('/api/bins/fifo', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// ==================== PENDING TASKS APIs ====================
+
+// Create pending task (when user presses back during incoming/outgoing)
+app.post('/api/pending-tasks/create', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { operatorId, taskType, sku, binNo, cfc, weight } = req.body;
+    
+    if (!operatorId || !taskType || !sku || !binNo || !cfc) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Set expiration time (30 minutes from now)
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    
+    const result = await client.query(`
+      INSERT INTO "Pending_Tasks" (operator_id, task_type, sku, bin_no, cfc, weight, expires_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *
+    `, [operatorId, taskType, sku, binNo, parseInt(cfc), weight || null, expiresAt]);
+    
+    console.log(`✅ Pending task created: ${taskType} - ${sku} to ${binNo} (${cfc} CFC)`);
+    
+    res.json({
+      success: true,
+      task: result.rows[0]
+    });
+    
+  } catch (error) {
+    console.error('Error creating pending task:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Get operator's pending tasks
+app.get('/api/pending-tasks/list', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { operatorId } = req.query;
+    
+    if (!operatorId) {
+      return res.status(400).json({ error: 'Operator ID required' });
+    }
+    
+    // First, auto-expire old tasks
+    await client.query(`
+      UPDATE "Pending_Tasks"
+      SET status = 'expired'
+      WHERE status = 'pending' AND expires_at < NOW()
+    `);
+    
+    // Get active pending tasks
+    const result = await client.query(`
+      SELECT *, 
+        EXTRACT(EPOCH FROM (expires_at - NOW())) as seconds_remaining
+      FROM "Pending_Tasks"
+      WHERE operator_id = $1 AND status = 'pending'
+      ORDER BY created_at DESC
+    `, [operatorId]);
+    
+    res.json({
+      success: true,
+      tasks: result.rows
+    });
+    
+  } catch (error) {
+    console.error('Error fetching pending tasks:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Complete pending task
+app.post('/api/pending-tasks/complete', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { taskId } = req.body;
+    
+    await client.query(`
+      UPDATE "Pending_Tasks"
+      SET status = 'completed'
+      WHERE id = $1
+    `, [taskId]);
+    
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error('Error completing task:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Delete/Cancel pending task
+app.post('/api/pending-tasks/cancel', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { taskId } = req.body;
+    
+    await client.query(`
+      DELETE FROM "Pending_Tasks" WHERE id = $1
+    `, [taskId]);
+    
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error('Error cancelling task:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ==================== BIN UPDATE ====================
 
 // Update bin after incoming
 app.post('/api/bins/update', async (req, res) => {
