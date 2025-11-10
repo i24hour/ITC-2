@@ -288,14 +288,37 @@ app.post('/api/admin/migrate-structure', async (req, res) => {
         operator_id VARCHAR(20) NOT NULL,
         task_type VARCHAR(20) NOT NULL CHECK (task_type IN ('incoming', 'outgoing')),
         sku VARCHAR(50) NOT NULL,
-        bin_no VARCHAR(20) NOT NULL,
-        cfc INTEGER NOT NULL,
+        bin_no VARCHAR(20),
+        cfc INTEGER,
         weight DECIMAL(10,2),
+        batch_no VARCHAR(50),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         expires_at TIMESTAMP NOT NULL,
         status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'expired'))
       )
     `);
+    
+    // Alter existing Pending_Tasks table to add batch_no and make columns nullable
+    try {
+      await client.query(`
+        ALTER TABLE "Pending_Tasks" 
+        ADD COLUMN IF NOT EXISTS batch_no VARCHAR(50)
+      `);
+      console.log('✅ Added batch_no column to Pending_Tasks');
+    } catch (err) {
+      console.log('ℹ️ batch_no column may already exist');
+    }
+    
+    try {
+      await client.query(`
+        ALTER TABLE "Pending_Tasks" 
+        ALTER COLUMN bin_no DROP NOT NULL,
+        ALTER COLUMN cfc DROP NOT NULL
+      `);
+      console.log('✅ Made bin_no and cfc nullable in Pending_Tasks');
+    } catch (err) {
+      console.log('ℹ️ Columns may already be nullable');
+    }
     
     // Create index for faster queries
     await client.query(`
@@ -1364,22 +1387,24 @@ app.get('/api/bins/fifo', async (req, res) => {
 app.post('/api/pending-tasks/create', async (req, res) => {
   const client = await db.getClient();
   try {
-    const { operatorId, taskType, sku, binNo, cfc, weight } = req.body;
+    const { operatorId, taskType, sku, binNo, cfc, weight, batchNo } = req.body;
     
-    if (!operatorId || !taskType || !sku || !binNo || !cfc) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    // Only operatorId, taskType, and sku are required
+    // binNo can be null if task is saved before bin selection
+    if (!operatorId || !taskType || !sku) {
+      return res.status(400).json({ error: 'Missing required fields: operatorId, taskType, sku' });
     }
     
     // Set expiration time (30 minutes from now)
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
     
     const result = await client.query(`
-      INSERT INTO "Pending_Tasks" (operator_id, task_type, sku, bin_no, cfc, weight, expires_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO "Pending_Tasks" (operator_id, task_type, sku, bin_no, cfc, weight, batch_no, expires_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
-    `, [operatorId, taskType, sku, binNo, parseInt(cfc), weight || null, expiresAt]);
+    `, [operatorId, taskType, sku, binNo || null, cfc || null, weight || null, batchNo || null, expiresAt]);
     
-    console.log(`✅ Pending task created: ${taskType} - ${sku} to ${binNo} (${cfc} CFC)`);
+    console.log(`✅ Pending task created: ${taskType} - ${sku} (${cfc || 0} CFC, Bin: ${binNo || 'Not selected'})`);
     
     res.json({
       success: true,
