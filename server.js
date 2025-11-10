@@ -3650,6 +3650,32 @@ app.listen(PORT, async () => {
     // Auto-restructure database if needed
     await autoRestructure();
     
+    // Ensure Pending_Tasks table exists (always run this)
+    try {
+      console.log('📦 Ensuring Pending_Tasks table exists...');
+      await db.query(`DROP TABLE IF EXISTS "Pending_Tasks"`);
+      await db.query(`
+        CREATE TABLE "Pending_Tasks" (
+          id SERIAL PRIMARY KEY,
+          operator_id VARCHAR(20) NOT NULL,
+          task_type VARCHAR(20) NOT NULL CHECK (task_type IN ('incoming', 'outgoing')),
+          sku VARCHAR(50) NOT NULL,
+          bin_no VARCHAR(20),
+          cfc INTEGER,
+          weight DECIMAL(10,2),
+          batch_no VARCHAR(50),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          expires_at TIMESTAMP NOT NULL,
+          status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'expired'))
+        )
+      `);
+      await db.query(`CREATE INDEX IF NOT EXISTS idx_pending_tasks_expires ON "Pending_Tasks" (expires_at)`);
+      await db.query(`CREATE INDEX IF NOT EXISTS idx_pending_tasks_operator ON "Pending_Tasks" (operator_id, status)`);
+      console.log('✅ Pending_Tasks table ready (with nullable bin_no, cfc, batch_no)');
+    } catch (err) {
+      console.error('⚠️ Error creating Pending_Tasks table:', err.message);
+    }
+    
     // Migrate sessions table to fix operator_id column size
     try {
       await migrateSessionsTable();
