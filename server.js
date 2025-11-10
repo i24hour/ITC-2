@@ -1485,6 +1485,76 @@ app.post('/api/pending-tasks/cancel', async (req, res) => {
   }
 });
 
+// Download all pending tasks as CSV (ADMIN)
+app.get('/api/admin/download-pending-tasks', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const result = await client.query(`
+      SELECT 
+        id,
+        operator_id,
+        task_type,
+        sku,
+        bin_no,
+        cfc,
+        weight,
+        batch_no,
+        created_at,
+        expires_at,
+        status,
+        EXTRACT(EPOCH FROM (expires_at - NOW())) as seconds_remaining
+      FROM "Pending_Tasks"
+      ORDER BY created_at DESC
+    `);
+    
+    // Create CSV
+    const headers = [
+      'ID',
+      'Operator ID',
+      'Task Type',
+      'SKU',
+      'Bin No',
+      'CFC',
+      'Weight',
+      'Batch No',
+      'Created At',
+      'Expires At',
+      'Status',
+      'Seconds Remaining'
+    ];
+    
+    let csv = headers.join(',') + '\n';
+    
+    result.rows.forEach(row => {
+      const csvRow = [
+        row.id,
+        row.operator_id,
+        row.task_type,
+        row.sku,
+        row.bin_no || '',
+        row.cfc || '',
+        row.weight || '',
+        row.batch_no || '',
+        row.created_at,
+        row.expires_at,
+        row.status,
+        Math.max(0, Math.floor(row.seconds_remaining))
+      ];
+      csv += csvRow.join(',') + '\n';
+    });
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=Pending_Tasks_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+    
+  } catch (error) {
+    console.error('Error downloading pending tasks:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== BIN UPDATE ====================
 
 // Update bin after incoming
