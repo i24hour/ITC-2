@@ -283,7 +283,10 @@ app.post('/api/admin/migrate-structure', async (req, res) => {
     // Step 2.5: Create Pending_Tasks table (for incomplete incoming/outgoing tasks)
     console.log('📦 Creating Pending_Tasks table...');
     await client.query(`
-      CREATE TABLE IF NOT EXISTS "Pending_Tasks" (
+      -- Drop old Pending_Tasks table if exists (for migration)
+      DROP TABLE IF EXISTS "Pending_Tasks";
+      
+      CREATE TABLE "Pending_Tasks" (
         id SERIAL PRIMARY KEY,
         operator_id VARCHAR(20) NOT NULL,
         task_type VARCHAR(20) NOT NULL CHECK (task_type IN ('incoming', 'outgoing')),
@@ -297,28 +300,7 @@ app.post('/api/admin/migrate-structure', async (req, res) => {
         status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'expired'))
       )
     `);
-    
-    // Alter existing Pending_Tasks table to add batch_no and make columns nullable
-    try {
-      await client.query(`
-        ALTER TABLE "Pending_Tasks" 
-        ADD COLUMN IF NOT EXISTS batch_no VARCHAR(50)
-      `);
-      console.log('✅ Added batch_no column to Pending_Tasks');
-    } catch (err) {
-      console.log('ℹ️ batch_no column may already exist');
-    }
-    
-    try {
-      await client.query(`
-        ALTER TABLE "Pending_Tasks" 
-        ALTER COLUMN bin_no DROP NOT NULL,
-        ALTER COLUMN cfc DROP NOT NULL
-      `);
-      console.log('✅ Made bin_no and cfc nullable in Pending_Tasks');
-    } catch (err) {
-      console.log('ℹ️ Columns may already be nullable');
-    }
+    console.log('✅ Pending_Tasks table created (with nullable bin_no and cfc)');
     
     // Create index for faster queries
     await client.query(`
