@@ -282,10 +282,13 @@ app.post('/api/admin/migrate-structure', async (req, res) => {
     
     // Step 2.5: Create Pending_Tasks table (for incomplete incoming/outgoing tasks)
     console.log('📦 Creating Pending_Tasks table...');
+    
+    // Drop existing table if it exists (for migration)
+    await client.query(`DROP TABLE IF EXISTS "Pending_Tasks"`);
+    console.log('🗑️  Dropped old Pending_Tasks table');
+    
+    // Create new table with correct schema
     await client.query(`
-      -- Drop and recreate Pending_Tasks table for migration
-      DROP TABLE IF EXISTS "Pending_Tasks";
-      
       CREATE TABLE "Pending_Tasks" (
         id SERIAL PRIMARY KEY,
         operator_id VARCHAR(20) NOT NULL,
@@ -298,7 +301,7 @@ app.post('/api/admin/migrate-structure', async (req, res) => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         expires_at TIMESTAMP NOT NULL,
         status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'expired'))
-      );
+      )
     `);
     console.log('✅ Pending_Tasks table created (with nullable bin_no and cfc)');
     
