@@ -1555,6 +1555,234 @@ app.get('/api/admin/download-pending-tasks', async (req, res) => {
   }
 });
 
+// Download Cleaned_FG_Master_file table
+app.get('/api/admin/download-master-file', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const result = await client.query(`SELECT * FROM "Cleaned_FG_Master_file" ORDER BY sku`);
+    
+    const headers = ['SKU', 'Description', 'UOM', 'Created At', 'Expire In Days'];
+    let csv = headers.join(',') + '\n';
+    
+    result.rows.forEach(row => {
+      csv += [row.sku, `"${row.description}"`, row.uom, row.created_at, row.expire_in_days || ''].join(',') + '\n';
+    });
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=Cleaned_FG_Master_file_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Error downloading master file:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Download Inventory table
+app.get('/api/admin/download-inventory', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const result = await client.query(`SELECT * FROM "Inventory" ORDER BY bin_no, sku`);
+    
+    const headers = ['ID', 'Bin No', 'SKU', 'Batch No', 'CFC', 'Description', 'UOM', 'Created At', 'Updated At', 'Expire Days'];
+    let csv = headers.join(',') + '\n';
+    
+    result.rows.forEach(row => {
+      csv += [
+        row.id,
+        row.bin_no,
+        row.sku,
+        row.batch_no || '',
+        row.cfc,
+        `"${row.description}"`,
+        row.uom,
+        row.created_at,
+        row.updated_at,
+        row.expire_days || ''
+      ].join(',') + '\n';
+    });
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=Inventory_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Error downloading inventory:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Download Bins table
+app.get('/api/admin/download-bins', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const result = await client.query(`SELECT * FROM "Bins" ORDER BY bin_no`);
+    
+    const headers = ['Bin No', 'Capacity'];
+    let csv = headers.join(',') + '\n';
+    
+    result.rows.forEach(row => {
+      csv += [row.bin_no, row.capacity].join(',') + '\n';
+    });
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=Bins_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Error downloading bins:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Download Operators table
+app.get('/api/admin/download-operators', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const result = await client.query(`SELECT * FROM "Operators" ORDER BY operator_id`);
+    
+    const headers = ['Operator ID', 'Name', 'Email', 'Password', 'Created At'];
+    let csv = headers.join(',') + '\n';
+    
+    result.rows.forEach(row => {
+      csv += [row.operator_id, row.name, row.email, row.password, row.created_at].join(',') + '\n';
+    });
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=Operators_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Error downloading operators:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Download Supervisors table
+app.get('/api/admin/download-supervisors', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const result = await client.query(`SELECT * FROM "Supervisors" ORDER BY supervisor_id`);
+    
+    const headers = ['Supervisor ID', 'Name', 'Email', 'Password', 'Created At'];
+    let csv = headers.join(',') + '\n';
+    
+    result.rows.forEach(row => {
+      csv += [row.supervisor_id, row.name, row.email, row.password, row.created_at].join(',') + '\n';
+    });
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=Supervisors_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Error downloading supervisors:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Download Task_History table
+app.get('/api/admin/download-task-history', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const result = await client.query(`SELECT * FROM "Task_History" ORDER BY completed_at DESC`);
+    
+    const headers = ['ID', 'Operator', 'Task Type', 'SKU', 'Quantity', 'Bins Used', 'Started At', 'Completed At'];
+    let csv = headers.join(',') + '\n';
+    
+    result.rows.forEach(row => {
+      csv += [
+        row.id,
+        row.operator,
+        row.task_type,
+        row.sku,
+        row.quantity,
+        `"${row.bins_used}"`,
+        row.started_at,
+        row.completed_at
+      ].join(',') + '\n';
+    });
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=Task_History_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Error downloading task history:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Download Incoming table
+app.get('/api/admin/download-incoming', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const result = await client.query(`SELECT * FROM "Incoming" ORDER BY timestamp DESC`);
+    
+    const headers = ['ID', 'SKU', 'Bin No', 'CFC', 'Description', 'UOM', 'Timestamp'];
+    let csv = headers.join(',') + '\n';
+    
+    result.rows.forEach(row => {
+      csv += [
+        row.id,
+        row.sku,
+        row.bin_no,
+        row.cfc,
+        `"${row.description}"`,
+        row.uom,
+        row.timestamp
+      ].join(',') + '\n';
+    });
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=Incoming_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Error downloading incoming:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Download Outgoing table
+app.get('/api/admin/download-outgoing', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const result = await client.query(`SELECT * FROM "Outgoing" ORDER BY timestamp DESC`);
+    
+    const headers = ['ID', 'SKU', 'Bin No', 'CFC', 'Description', 'UOM', 'Timestamp'];
+    let csv = headers.join(',') + '\n';
+    
+    result.rows.forEach(row => {
+      csv += [
+        row.id,
+        row.sku,
+        row.bin_no,
+        row.cfc,
+        `"${row.description}"`,
+        row.uom,
+        row.timestamp
+      ].join(',') + '\n';
+    });
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=Outgoing_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Error downloading outgoing:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== BIN UPDATE ====================
 
 // Update bin after incoming
