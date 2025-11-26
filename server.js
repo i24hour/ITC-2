@@ -111,7 +111,7 @@ app.get('/api/db-status', async (req, res) => {
     // Check Incoming table
     if (status.existingTables.includes('Incoming')) {
       const incomingCount = await client.query('SELECT COUNT(*) as count FROM "Incoming"');
-      const recentIncoming = await client.query('SELECT id, sku, quantity, bin_no, operator_id FROM "Incoming" ORDER BY incoming_date DESC LIMIT 5');
+      const recentIncoming = await client.query('SELECT id, sku, quantity, bin_no, operator_id FROM "Incoming" ORDER BY id DESC LIMIT 5');
       status.counts.incomingRecords = incomingCount.rows[0].count;
       status.tables.incoming = recentIncoming.rows;
     }
@@ -119,7 +119,7 @@ app.get('/api/db-status', async (req, res) => {
     // Check Outgoing table
     if (status.existingTables.includes('Outgoing')) {
       const outgoingCount = await client.query('SELECT COUNT(*) as count FROM "Outgoing"');
-      const recentOutgoing = await client.query('SELECT id, sku, quantity, bin_no, operator_id FROM "Outgoing" ORDER BY outgoing_date DESC LIMIT 5');
+      const recentOutgoing = await client.query('SELECT id, sku, quantity, bin_no, operator_id FROM "Outgoing" ORDER BY id DESC LIMIT 5');
       status.counts.outgoingRecords = outgoingCount.rows[0].count;
       status.tables.outgoing = recentOutgoing.rows;
     }
