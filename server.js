@@ -1823,6 +1823,26 @@ app.post('/api/admin/upload-bingo-inventory', async (req, res) => {
     
     console.log(`✅ Parsed ${inventoryData.length} valid inventory records`);
     
+    // Get existing bins
+    const existingBinsResult = await client.query('SELECT bin_no FROM "Bins"');
+    const existingBins = new Set(existingBinsResult.rows.map(row => row.bin_no));
+    
+    // Create missing bins
+    const uniqueBins = new Set(inventoryData.map(item => item.bin_no));
+    const missingBins = [...uniqueBins].filter(bin => !existingBins.has(bin));
+    
+    if (missingBins.length > 0) {
+      console.log(`📦 Creating ${missingBins.length} missing bins...`);
+      for (const binNo of missingBins) {
+        await client.query(`
+          INSERT INTO "Bins" (bin_no, status)
+          VALUES ($1, 'empty')
+          ON CONFLICT (bin_no) DO NOTHING
+        `, [binNo]);
+      }
+      console.log(`✅ Missing bins created`);
+    }
+    
     // Clear old inventory data
     await client.query('DELETE FROM "Bin_Inventory"');
     console.log('✅ Old inventory data cleared');
