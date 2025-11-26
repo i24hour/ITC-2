@@ -41,17 +41,24 @@ console.log('\n📝 Generating SQL statements...');
 
 // Generate SQL
 let sql = `-- Clear old inventory\nDELETE FROM "Bin_Inventory";\n\n`;
-sql += `-- Insert new inventory data\n`;
+
+// Collect unique bins
+const uniqueBins = new Set(inventoryData.map(item => item.bin_no));
+sql += `-- Create missing bins\n`;
+for (const binNo of uniqueBins) {
+  const escapedBin = binNo.replace(/'/g, "''");
+  sql += `INSERT INTO "Bins" (bin_no, status) VALUES ('${escapedBin}', 'empty') ON CONFLICT (bin_no) DO NOTHING;\n`;
+}
+
+sql += `\n-- Insert new inventory data\n`;
 
 for (const item of inventoryData) {
   const binNo = item.bin_no.replace(/'/g, "''");
   const sku = item.sku.replace(/'/g, "''");
   const batch = item.batch_no.replace(/'/g, "''");
-  const desc = item.description.replace(/'/g, "''");
-  const cfc = item.cfc.replace(/'/g, "''");
-  const uom = item.uom.replace(/'/g, "''");
+  const quantity = parseInt(item.cfc) || 0;
   
-  sql += `INSERT INTO "Bin_Inventory" (bin_no, sku, batch_no, cfc, description, uom, created_at, updated_at) VALUES ('${binNo}', '${sku}', '${batch}', '${cfc}', '${desc}', '${uom}', NOW(), NOW());\n`;
+  sql += `INSERT INTO "Bin_Inventory" (bin_no, sku, batch_no, quantity, status) VALUES ('${binNo}', '${sku}', '${batch}', ${quantity}, 'active');\n`;
 }
 
 // Write to file
