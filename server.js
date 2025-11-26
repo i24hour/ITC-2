@@ -1890,6 +1890,49 @@ app.post('/api/admin/upload-bingo-inventory', async (req, res) => {
   }
 });
 
+// Add new SKUs to Cleaned_FG_Master_file
+app.post('/api/admin/add-new-skus', async (req, res) => {
+  const client = await db.getClient();
+  
+  try {
+    const { newSKUs } = req.body;
+    
+    if (!newSKUs || !Array.isArray(newSKUs)) {
+      return res.status(400).json({ error: 'newSKUs array is required' });
+    }
+    
+    console.log(`📝 Adding ${newSKUs.length} new SKUs to master file...`);
+    
+    let insertedCount = 0;
+    for (const sku of newSKUs) {
+      await client.query(`
+        INSERT INTO "Cleaned_FG_Master_file" (sku, description, uom, created_at, expire_in_days)
+        VALUES ($1, NULL, NULL, NOW(), NULL)
+        ON CONFLICT (sku) DO NOTHING
+      `, [sku]);
+      insertedCount++;
+    }
+    
+    // Get total count
+    const countResult = await client.query('SELECT COUNT(*) as total FROM "Cleaned_FG_Master_file"');
+    
+    res.json({
+      success: true,
+      message: 'New SKUs added successfully',
+      summary: {
+        addedSKUs: insertedCount,
+        totalSKUs: countResult.rows[0].total
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error adding new SKUs:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== BIN UPDATE ====================
 
 // Update bin after incoming
