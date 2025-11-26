@@ -1803,22 +1803,21 @@ app.post('/api/admin/upload-bingo-inventory', async (req, res) => {
       const binNo = parts[0]?.trim();
       const sku = parts[1]?.trim();
       const batch = parts[2]?.trim();
-      const description = parts[3]?.trim() || '0';
       const cfc = parts[4]?.trim();
-      const uom = parts[5]?.trim();
       
       // Skip empty bins or rows with no SKU
       if (!binNo || !sku || sku === '0' || !batch) {
         continue;
       }
       
+      // CFC value will be used as quantity
+      const quantity = parseInt(cfc) || 0;
+      
       inventoryData.push({
         bin_no: binNo,
         sku: sku,
         batch_no: batch,
-        description: description,
-        cfc: cfc || '0',
-        uom: uom || '-'
+        quantity: quantity
       });
     }
     
@@ -1832,15 +1831,13 @@ app.post('/api/admin/upload-bingo-inventory', async (req, res) => {
     let insertedCount = 0;
     for (const item of inventoryData) {
       await client.query(`
-        INSERT INTO "Bin_Inventory" (bin_no, sku, batch_no, cfc, description, uom, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+        INSERT INTO "Bin_Inventory" (bin_no, sku, batch_no, quantity, status)
+        VALUES ($1, $2, $3, $4, 'active')
       `, [
         item.bin_no,
         item.sku,
         item.batch_no,
-        item.cfc,
-        item.description,
-        item.uom
+        item.quantity
       ]);
       insertedCount++;
     }
