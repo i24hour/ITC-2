@@ -1723,20 +1723,18 @@ app.get('/api/admin/download-task-history', async (req, res) => {
 app.get('/api/admin/download-incoming', async (req, res) => {
   const client = await db.getClient();
   try {
-    const result = await client.query(`SELECT * FROM "Incoming" ORDER BY timestamp DESC`);
+    const result = await client.query(`SELECT * FROM incoming ORDER BY id DESC`);
     
-    const headers = ['ID', 'SKU', 'Bin No', 'CFC', 'Description', 'UOM', 'Timestamp'];
+    const headers = ['ID', 'SKU', 'Quantity', 'Bin No', 'Operator ID'];
     let csv = headers.join(',') + '\n';
     
     result.rows.forEach(row => {
       csv += [
         row.id,
         row.sku,
+        row.quantity,
         row.bin_no,
-        row.cfc,
-        `"${row.description}"`,
-        row.uom,
-        row.timestamp
+        row.operator_id
       ].join(',') + '\n';
     });
     
@@ -1755,20 +1753,18 @@ app.get('/api/admin/download-incoming', async (req, res) => {
 app.get('/api/admin/download-outgoing', async (req, res) => {
   const client = await db.getClient();
   try {
-    const result = await client.query(`SELECT * FROM "Outgoing" ORDER BY timestamp DESC`);
+    const result = await client.query(`SELECT * FROM outgoing ORDER BY id DESC`);
     
-    const headers = ['ID', 'SKU', 'Bin No', 'CFC', 'Description', 'UOM', 'Timestamp'];
+    const headers = ['ID', 'SKU', 'Quantity', 'Bin No', 'Operator ID'];
     let csv = headers.join(',') + '\n';
     
     result.rows.forEach(row => {
       csv += [
         row.id,
         row.sku,
+        row.quantity,
         row.bin_no,
-        row.cfc,
-        `"${row.description}"`,
-        row.uom,
-        row.timestamp
+        row.operator_id
       ].join(',') + '\n';
     });
     
