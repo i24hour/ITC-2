@@ -1907,9 +1907,9 @@ app.post('/api/admin/add-new-skus', async (req, res) => {
     for (const sku of newSKUs) {
       await client.query(`
         INSERT INTO "Cleaned_FG_Master_file" (sku, description, uom, created_at, expire_in_days)
-        VALUES ($1, $1, 'PCS', NOW(), 365)
+        VALUES ($1, $2, $3, NOW(), $4)
         ON CONFLICT (sku) DO NOTHING
-      `, [sku]);
+      `, [sku, sku, 'PCS', 365]);
       insertedCount++;
     }
     
@@ -1918,9 +1918,9 @@ app.post('/api/admin/add-new-skus', async (req, res) => {
     for (const sku of newSKUs) {
       await client.query(`
         INSERT INTO active_skus (sku, is_active)
-        VALUES ($1, true)
-        ON CONFLICT (sku) DO UPDATE SET is_active = true
-      `, [sku]);
+        VALUES ($1, $2)
+        ON CONFLICT (sku) DO UPDATE SET is_active = $2
+      `, [sku, true]);
     }
     
     // Get total count
