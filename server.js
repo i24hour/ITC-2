@@ -1723,7 +1723,7 @@ app.get('/api/admin/download-task-history', async (req, res) => {
 app.get('/api/admin/download-incoming', async (req, res) => {
   const client = await db.getClient();
   try {
-    const result = await client.query(`SELECT * FROM incoming ORDER BY id DESC`);
+    const result = await client.query(`SELECT * FROM "Incoming" ORDER BY id DESC`);
     
     const headers = ['ID', 'SKU', 'Quantity', 'Bin No', 'Operator ID'];
     let csv = headers.join(',') + '\n';
@@ -1753,7 +1753,7 @@ app.get('/api/admin/download-incoming', async (req, res) => {
 app.get('/api/admin/download-outgoing', async (req, res) => {
   const client = await db.getClient();
   try {
-    const result = await client.query(`SELECT * FROM outgoing ORDER BY id DESC`);
+    const result = await client.query(`SELECT * FROM "Outgoing" ORDER BY id DESC`);
     
     const headers = ['ID', 'SKU', 'Quantity', 'Bin No', 'Operator ID'];
     let csv = headers.join(',') + '\n';
