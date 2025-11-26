@@ -1779,6 +1779,100 @@ app.get('/api/admin/download-outgoing', async (req, res) => {
   }
 });
 
+// Upload and update inventory from BINGO STOCK CSV
+app.post('/api/admin/upload-bingo-inventory', async (req, res) => {
+  const client = await db.getClient();
+  
+  try {
+    const { csvData } = req.body;
+    
+    if (!csvData) {
+      return res.status(400).json({ error: 'CSV data is required' });
+    }
+    
+    console.log('📥 Processing BINGO STOCK CSV data...');
+    
+    // Parse CSV data
+    const lines = csvData.split('\n');
+    const dataLines = lines.slice(3).filter(line => line.trim()); // Skip header lines
+    
+    const inventoryData = [];
+    for (const line of dataLines) {
+      const parts = line.split(',');
+      
+      const binNo = parts[0]?.trim();
+      const sku = parts[1]?.trim();
+      const batch = parts[2]?.trim();
+      const description = parts[3]?.trim() || '0';
+      const cfc = parts[4]?.trim();
+      const uom = parts[5]?.trim();
+      
+      // Skip empty bins or rows with no SKU
+      if (!binNo || !sku || sku === '0' || !batch) {
+        continue;
+      }
+      
+      inventoryData.push({
+        bin_no: binNo,
+        sku: sku,
+        batch_no: batch,
+        description: description,
+        cfc: cfc || '0',
+        uom: uom || '-'
+      });
+    }
+    
+    console.log(`✅ Parsed ${inventoryData.length} valid inventory records`);
+    
+    // Clear old inventory data
+    await client.query('DELETE FROM "Bin_Inventory"');
+    console.log('✅ Old inventory data cleared');
+    
+    // Insert new inventory data
+    let insertedCount = 0;
+    for (const item of inventoryData) {
+      await client.query(`
+        INSERT INTO "Bin_Inventory" (bin_no, sku, batch_no, cfc, description, uom, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+      `, [
+        item.bin_no,
+        item.sku,
+        item.batch_no,
+        item.cfc,
+        item.description,
+        item.uom
+      ]);
+      insertedCount++;
+    }
+    
+    // Get summary
+    const summary = await client.query(`
+      SELECT 
+        COUNT(*) as total_records,
+        COUNT(DISTINCT bin_no) as unique_bins,
+        COUNT(DISTINCT sku) as unique_skus
+      FROM "Bin_Inventory"
+    `);
+    
+    res.json({
+      success: true,
+      message: 'Inventory updated successfully',
+      summary: {
+        totalRecords: summary.rows[0].total_records,
+        uniqueBins: summary.rows[0].unique_bins,
+        uniqueSkus: summary.rows[0].unique_skus,
+        insertedCount: insertedCount
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating inventory:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== BIN UPDATE ====================
 
 // Update bin after incoming
