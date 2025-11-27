@@ -14,6 +14,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (supervisorSection) {
             supervisorSection.style.display = 'block';
         }
+        
+        // Show Reports card only for supervisors
+        const reportsCard = document.getElementById('reports-card');
+        if (reportsCard) {
+            reportsCard.style.display = 'flex';
+        }
     }
 
     // Set user name and operator ID
