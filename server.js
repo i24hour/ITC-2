@@ -1909,7 +1909,7 @@ app.post('/api/admin/add-new-skus', async (req, res) => {
         INSERT INTO "Cleaned_FG_Master_file" (sku, description, uom, created_at, expire_in_days)
         VALUES ($1, $2, $3, NOW(), $4)
         ON CONFLICT (sku) DO NOTHING
-      `, [sku, sku, 'PCS', 365]);
+      `, [sku, sku, 2.0, 365]);
       insertedCount++;
     }
     
