@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Show Reports card only for supervisors
         const reportsCard = document.getElementById('reports-card');
         if (reportsCard) {
-            reportsCard.style.setProperty('display', 'flex', 'important');
+            reportsCard.style.setProperty('display', 'block', 'important');
         }
     }
 
