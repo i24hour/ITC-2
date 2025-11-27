@@ -1,6 +1,5 @@
 const { Client } = require('pg');
 const fs = require('fs');
-const csv = require('csv-parser');
 
 const client = new Client({
   host: 'itc-warehouse-db-2025.postgres.database.azure.com',
@@ -21,44 +20,72 @@ async function updateInventoryFromBingo() {
     await client.query('DELETE FROM "Inventory"');
     console.log('✅ Old data cleared\n');
 
-    // Step 2: Read BINGO STOCK CSV (skip first 2 header rows)
+    // Step 2: Read BINGO STOCK CSV manually
     console.log('📖 Reading BINGO STOCK  26.11.2025.xlsx - STOCK SHEET.csv...');
-    const bingoData = [];
-    let lineCount = 0;
+    const fileContent = fs.readFileSync('BINGO STOCK  26.11.2025.xlsx - STOCK SHEET.csv', 'utf-8');
+    const lines = fileContent.split('\n');
     
-    await new Promise((resolve, reject) => {
-      fs.createReadStream('BINGO STOCK  26.11.2025.xlsx - STOCK SHEET.csv')
-        .pipe(csv())
-        .on('data', (row) => {
-          lineCount++;
-          // Skip first 2 rows (extra headers)
-          if (lineCount <= 2) return;
-          
-          // Parse the row - column names from line 3
-          const binNo = row['BIN NO'] || row['Bin No'] || row['bin_no'];
-          const sku = row['SKU'] || row['sku'];
-          const batchNo = row['BATCH'] || row['Batch'] || row['batch_no'] || row['BATCH NO'];
-          const cfc = row['CFC'] || row['cfc'];
-          
-          // Only add if we have required fields and not empty
-          if (binNo && sku && batchNo && cfc && binNo.trim() !== '') {
-            bingoData.push({
-              bin_no: binNo.trim(),
-              sku: sku.trim(),
-              batch_no: batchNo.trim(),
-              cfc: parseInt(cfc) || 0
-            });
-          }
-        })
-        .on('end', resolve)
-        .on('error', reject);
-    });
+    const bingoData = [];
+    
+    // Find the header line (should have "BIN NO,SKU,BATCH")
+    let headerIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes('BIN NO') && lines[i].includes('SKU') && lines[i].includes('BATCH')) {
+        headerIndex = i;
+        break;
+      }
+    }
+    
+    if (headerIndex === -1) {
+      console.log('❌ Could not find header row in CSV!');
+      return;
+    }
+    
+    console.log(`✅ Found headers at line ${headerIndex + 1}`);
+    const headers = lines[headerIndex].split(',').map(h => h.trim());
+    console.log('Headers:', headers);
+    
+    // Get column indices
+    const binIndex = headers.findIndex(h => h.includes('BIN'));
+    const skuIndex = headers.findIndex(h => h.includes('SKU'));
+    const batchIndex = headers.findIndex(h => h.includes('BATCH'));
+    const cfcIndex = headers.findIndex(h => h.includes('CFC'));
+    
+    console.log(`Column indices - BIN:${binIndex}, SKU:${skuIndex}, BATCH:${batchIndex}, CFC:${cfcIndex}\n`);
+    
+    // Parse data rows
+    for (let i = headerIndex + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const cols = line.split(',');
+      
+      const binNo = cols[binIndex] ? cols[binIndex].trim() : '';
+      const sku = cols[skuIndex] ? cols[skuIndex].trim() : '';
+      const batchNo = cols[batchIndex] ? cols[batchIndex].trim() : '';
+      const cfc = cols[cfcIndex] ? cols[cfcIndex].trim() : '';
+      
+      // Only add if we have required fields
+      if (binNo && sku && batchNo && cfc && binNo !== '-' && sku !== '-') {
+        bingoData.push({
+          bin_no: binNo,
+          sku: sku,
+          batch_no: batchNo,
+          cfc: parseInt(cfc) || 0
+        });
+      }
+    }
 
     console.log(`✅ Found ${bingoData.length} valid records from BINGO STOCK\n`);
 
     if (bingoData.length === 0) {
       console.log('⚠️  No valid data found in BINGO STOCK file!');
       console.log('✅ Inventory table is now empty as requested.');
+      
+      // Download empty table
+      const headers = ['ID', 'Bin No', 'SKU', 'Batch No', 'CFC', 'Description', 'UOM', 'Created At', 'Updated At', 'Expire Days'];
+      fs.writeFileSync('database/Inventory_2025-11-27.csv', headers.join(',') + '\n');
+      console.log('✅ Empty CSV saved to: database/Inventory_2025-11-27.csv');
       return;
     }
 
@@ -77,6 +104,7 @@ async function updateInventoryFromBingo() {
             uom: result.rows[0].uom
           };
         } else {
+          console.log(`⚠️  SKU ${item.sku} not found in master file, using defaults`);
           skuDetails[item.sku] = {
             description: item.sku,
             uom: 2.0
@@ -86,7 +114,7 @@ async function updateInventoryFromBingo() {
     }
 
     // Step 4: Insert into Inventory table
-    console.log('📝 Inserting data into Inventory table...');
+    console.log('\n📝 Inserting data into Inventory table...');
     let insertedCount = 0;
     
     for (const item of bingoData) {
@@ -116,8 +144,8 @@ async function updateInventoryFromBingo() {
     console.log('\n📥 Downloading updated Inventory table...');
     const result = await client.query('SELECT * FROM "Inventory" ORDER BY id');
 
-    const headers = ['ID', 'Bin No', 'SKU', 'Batch No', 'CFC', 'Description', 'UOM', 'Created At', 'Updated At', 'Expire Days'];
-    let csvContent = headers.join(',') + '\n';
+    const csvHeaders = ['ID', 'Bin No', 'SKU', 'Batch No', 'CFC', 'Description', 'UOM', 'Created At', 'Updated At', 'Expire Days'];
+    let csvContent = csvHeaders.join(',') + '\n';
 
     result.rows.forEach(row => {
       csvContent += [
@@ -140,7 +168,7 @@ async function updateInventoryFromBingo() {
 
   } catch (error) {
     console.error('❌ Error:', error.message);
-    console.error(error);
+    console.error(error.stack);
   } finally {
     await client.end();
   }
