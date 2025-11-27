@@ -2575,6 +2575,7 @@ app.post('/api/tasks/create', async (req, res) => {
 
 // Complete a task
 app.post('/api/tasks/complete', async (req, res) => {
+  const client = await db.getClient();
   try {
     const { taskId } = req.body;
     
@@ -2582,24 +2583,31 @@ app.post('/api/tasks/complete', async (req, res) => {
       return res.status(400).json({ error: 'Task ID is required' });
     }
     
-    // Check if task is cancelled
-    const checkResult = await db.query(
-      `SELECT status FROM tasks WHERE id = $1`,
+    await client.query('BEGIN');
+    
+    // Get full task details before completing
+    const taskDetails = await client.query(
+      `SELECT * FROM tasks WHERE id = $1`,
       [taskId]
     );
     
-    if (checkResult.rows.length === 0) {
+    if (taskDetails.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Task not found' });
     }
     
-    if (checkResult.rows[0].status === 'cancelled') {
+    const task = taskDetails.rows[0];
+    
+    if (task.status === 'cancelled') {
+      await client.query('ROLLBACK');
       return res.status(400).json({ 
         error: 'This task has been cancelled by supervisor',
         cancelled: true
       });
     }
     
-    const result = await db.query(
+    // Update task to completed
+    const result = await client.query(
       `UPDATE tasks 
        SET status = 'completed', completed_at = CURRENT_TIMESTAMP
        WHERE id = $1 AND status = 'ongoing'
@@ -2607,14 +2615,47 @@ app.post('/api/tasks/complete', async (req, res) => {
       [taskId]
     );
     
+    // Insert into Task_History
+    const taskType = task.task_type || task.type || 'unknown';
+    const scannedBins = (task.scanned_bins || '').split(',').filter(Boolean).join(', ') || 'N/A';
+    const totalQty = task.reserved_qty || task.quantity || 0;
+    const startedAt = task.created_at;
+    const completedAt = new Date();
+    const durationMs = completedAt - new Date(startedAt);
+    const durationMinutes = Math.round(durationMs / 60000);
+    
+    await client.query(
+      `INSERT INTO "Task_History" (
+        task_id, operator_id, operator_name, task_type, sku, quantity,
+        bins_used, status, started_at, completed_at, duration_minutes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10)`,
+      [
+        task.id,
+        task.operator_id || task.operator || 'UNKNOWN',
+        task.operator_name || task.operator || 'Unknown',
+        taskType,
+        task.sku,
+        totalQty,
+        scannedBins,
+        'completed',
+        startedAt,
+        durationMinutes
+      ]
+    );
+    
+    await client.query('COMMIT');
+    
     res.json({
       success: true,
       message: 'Task completed successfully',
       task: result.rows[0]
     });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error completing task:', error);
     res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
   }
 });
 
