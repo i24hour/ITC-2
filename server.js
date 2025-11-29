@@ -551,54 +551,42 @@ app.post('/api/admin/empty-inventory', async (req, res) => {
   }
 });
 
-// Admin endpoint: Empty all transaction tables (Incoming, Outgoing, Inventory, Task_History)
+// Admin endpoint: Empty all transaction tables (Inventory, Incoming, Outgoing, Task_History)
 app.post('/api/admin/empty-all-tables', async (req, res) => {
   const client = await db.getClient();
   try {
     console.log('🗑️  Emptying all transaction tables...');
     
+    const tables = ['Inventory', 'Incoming', 'Outgoing', 'Task_History'];
     const results = {};
     
-    // Count and delete from Inventory
-    const inventoryCountBefore = await client.query('SELECT COUNT(*) as count FROM "Inventory"');
-    const inventoryResult = await client.query('DELETE FROM "Inventory"');
-    results.inventory = {
-      before: parseInt(inventoryCountBefore.rows[0].count),
-      deleted: inventoryResult.rowCount
-    };
-    
-    // Count and delete from Incoming
-    const incomingCountBefore = await client.query('SELECT COUNT(*) as count FROM "Incoming"');
-    const incomingResult = await client.query('DELETE FROM "Incoming"');
-    results.incoming = {
-      before: parseInt(incomingCountBefore.rows[0].count),
-      deleted: incomingResult.rowCount
-    };
-    
-    // Count and delete from Outgoing
-    const outgoingCountBefore = await client.query('SELECT COUNT(*) as count FROM "Outgoing"');
-    const outgoingResult = await client.query('DELETE FROM "Outgoing"');
-    results.outgoing = {
-      before: parseInt(outgoingCountBefore.rows[0].count),
-      deleted: outgoingResult.rowCount
-    };
-    
-    // Count and delete from Task_History
-    const taskCountBefore = await client.query('SELECT COUNT(*) as count FROM "Task_History"');
-    const taskResult = await client.query('DELETE FROM "Task_History"');
-    results.taskHistory = {
-      before: parseInt(taskCountBefore.rows[0].count),
-      deleted: taskResult.rowCount
-    };
-    
-    console.log('✅ All transaction tables emptied:', results);
+    for (const table of tables) {
+      try {
+        const countBefore = await client.query(`SELECT COUNT(*) as count FROM "${table}"`);
+        const before = parseInt(countBefore.rows[0].count);
+        
+        const deleteResult = await client.query(`DELETE FROM "${table}"`);
+        
+        const countAfter = await client.query(`SELECT COUNT(*) as count FROM "${table}"`);
+        const after = parseInt(countAfter.rows[0].count);
+        
+        results[table] = {
+          before,
+          deleted: deleteResult.rowCount,
+          after
+        };
+        
+        console.log(`✅ ${table}: Deleted ${deleteResult.rowCount} records`);
+      } catch (err) {
+        console.error(`❌ Error with ${table}:`, err.message);
+        results[table] = { error: err.message };
+      }
+    }
     
     res.json({
       success: true,
       message: 'All transaction tables emptied successfully',
-      results: results,
-      totalDeleted: results.inventory.deleted + results.incoming.deleted + 
-                    results.outgoing.deleted + results.taskHistory.deleted
+      results: results
     });
     
   } catch (error) {
