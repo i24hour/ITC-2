@@ -513,6 +513,44 @@ app.get('/api/admin/export-table/:tableName', async (req, res) => {
   }
 });
 
+// Admin endpoint: Empty inventory table
+app.post('/api/admin/empty-inventory', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    console.log('🗑️  Emptying inventory table...');
+    
+    // Count before deletion
+    const countBefore = await client.query('SELECT COUNT(*) as count FROM "Inventory"');
+    const recordsBefore = parseInt(countBefore.rows[0].count);
+    
+    // Delete all records
+    const result = await client.query('DELETE FROM "Inventory"');
+    
+    // Verify deletion
+    const countAfter = await client.query('SELECT COUNT(*) as count FROM "Inventory"');
+    const recordsAfter = parseInt(countAfter.rows[0].count);
+    
+    console.log(`✅ Deleted ${result.rowCount} records from Inventory`);
+    
+    res.json({
+      success: true,
+      message: 'Inventory table emptied successfully',
+      recordsDeleted: result.rowCount,
+      recordsBefore: recordsBefore,
+      recordsAfter: recordsAfter
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to empty inventory:', error);
+    res.status(500).json({ 
+      error: error.message,
+      stack: error.stack 
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== AUTHENTICATION API ENDPOINTS ====================
 
 // Login endpoint - creates server-side session with auto role detection
