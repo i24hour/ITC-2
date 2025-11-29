@@ -551,6 +551,67 @@ app.post('/api/admin/empty-inventory', async (req, res) => {
   }
 });
 
+// Admin endpoint: Empty all transaction tables (Incoming, Outgoing, Inventory, Task_History)
+app.post('/api/admin/empty-all-tables', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    console.log('🗑️  Emptying all transaction tables...');
+    
+    const results = {};
+    
+    // Count and delete from Inventory
+    const inventoryCountBefore = await client.query('SELECT COUNT(*) as count FROM "Inventory"');
+    const inventoryResult = await client.query('DELETE FROM "Inventory"');
+    results.inventory = {
+      before: parseInt(inventoryCountBefore.rows[0].count),
+      deleted: inventoryResult.rowCount
+    };
+    
+    // Count and delete from Incoming
+    const incomingCountBefore = await client.query('SELECT COUNT(*) as count FROM "Incoming"');
+    const incomingResult = await client.query('DELETE FROM "Incoming"');
+    results.incoming = {
+      before: parseInt(incomingCountBefore.rows[0].count),
+      deleted: incomingResult.rowCount
+    };
+    
+    // Count and delete from Outgoing
+    const outgoingCountBefore = await client.query('SELECT COUNT(*) as count FROM "Outgoing"');
+    const outgoingResult = await client.query('DELETE FROM "Outgoing"');
+    results.outgoing = {
+      before: parseInt(outgoingCountBefore.rows[0].count),
+      deleted: outgoingResult.rowCount
+    };
+    
+    // Count and delete from Task_History
+    const taskCountBefore = await client.query('SELECT COUNT(*) as count FROM "Task_History"');
+    const taskResult = await client.query('DELETE FROM "Task_History"');
+    results.taskHistory = {
+      before: parseInt(taskCountBefore.rows[0].count),
+      deleted: taskResult.rowCount
+    };
+    
+    console.log('✅ All transaction tables emptied:', results);
+    
+    res.json({
+      success: true,
+      message: 'All transaction tables emptied successfully',
+      results: results,
+      totalDeleted: results.inventory.deleted + results.incoming.deleted + 
+                    results.outgoing.deleted + results.taskHistory.deleted
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to empty tables:', error);
+    res.status(500).json({ 
+      error: error.message,
+      stack: error.stack 
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // ==================== AUTHENTICATION API ENDPOINTS ====================
 
 // Login endpoint - creates server-side session with auto role detection
