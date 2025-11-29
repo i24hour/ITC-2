@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Show Reports card only for supervisors
         const reportsCard = document.getElementById('reports-card');
         if (reportsCard) {
-            reportsCard.style.display = '';  // Remove inline style to use CSS default
+            reportsCard.style.display = 'block';  // Explicitly show the card
         }
     } else {
         // Hide Reports card for operators
