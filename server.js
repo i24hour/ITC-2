@@ -692,10 +692,20 @@ app.post('/api/admin/run-task-migration', async (req, res) => {
 app.post('/api/bins/hold', async (req, res) => {
   const client = await db.getClient();
   try {
-    const { operatorId, bins, taskId, expiresIn = 1800 } = req.body;
+    const { operatorId, bins, sku, taskId, expiresIn = 1800 } = req.body;
     
     if (!operatorId || !bins || bins.length === 0) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Missing required fields' 
+      });
+    }
+    
+    if (!sku) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'SKU is required' 
+      });
     }
     
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
@@ -704,7 +714,8 @@ app.post('/api/bins/hold', async (req, res) => {
     await client.query('BEGIN');
     
     for (const bin of bins) {
-      const { binNo, sku, cfcToHold } = bin;
+      const { binNo, cfcToHold } = bin;
+      const binSku = bin.sku || sku; // Use bin-specific SKU or fallback to request SKU
       
       // Check if bin has enough space
       const binCheck = await client.query(
@@ -716,7 +727,10 @@ app.post('/api/bins/hold', async (req, res) => {
       
       if (binCheck.rows.length === 0) {
         await client.query('ROLLBACK');
-        return res.status(404).json({ error: `Bin ${binNo} not found` });
+        return res.status(404).json({ 
+          success: false,
+          message: `Bin ${binNo} not found` 
+        });
       }
       
       const { cfc_capacity, cfc_held, cfc_filled } = binCheck.rows[0];
@@ -725,7 +739,8 @@ app.post('/api/bins/hold', async (req, res) => {
       if (available < cfcToHold) {
         await client.query('ROLLBACK');
         return res.status(400).json({ 
-          error: `Bin ${binNo} has insufficient space. Available: ${available}, Required: ${cfcToHold}` 
+          success: false,
+          message: `Bin ${binNo} has insufficient space. Available: ${available}, Required: ${cfcToHold}` 
         });
       }
       
@@ -734,7 +749,7 @@ app.post('/api/bins/hold', async (req, res) => {
         `INSERT INTO "Bin_Holds" (bin_no, sku, cfc_held, operator_id, task_id, expires_at)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING hold_id`,
-        [binNo, sku, cfcToHold, operatorId, taskId, expiresAt]
+        [binNo, binSku, cfcToHold, operatorId, taskId, expiresAt]
       );
       
       // Update bin's held count
@@ -746,7 +761,7 @@ app.post('/api/bins/hold', async (req, res) => {
       holds.push({
         holdId: holdResult.rows[0].hold_id,
         binNo,
-        sku,
+        sku: binSku,
         cfcHeld: cfcToHold
       });
     }
@@ -763,7 +778,11 @@ app.post('/api/bins/hold', async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ Failed to create holds:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      success: false,
+      message: error.message,
+      error: error.message 
+    });
   } finally {
     client.release();
   }
