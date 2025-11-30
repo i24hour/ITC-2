@@ -4883,12 +4883,11 @@ app.listen(PORT, async () => {
     // Auto-restructure database if needed
     await autoRestructure();
     
-    // Ensure Pending_Tasks table exists (always run this)
+    // Ensure Pending_Tasks table exists (CREATE IF NOT EXISTS - don't drop!)
     try {
       console.log('📦 Ensuring Pending_Tasks table exists...');
-      await db.query(`DROP TABLE IF EXISTS "Pending_Tasks"`);
       await db.query(`
-        CREATE TABLE "Pending_Tasks" (
+        CREATE TABLE IF NOT EXISTS "Pending_Tasks" (
           id SERIAL PRIMARY KEY,
           operator_id VARCHAR(20) NOT NULL,
           task_type VARCHAR(20) NOT NULL CHECK (task_type IN ('incoming', 'outgoing')),
@@ -4905,7 +4904,7 @@ app.listen(PORT, async () => {
       `);
       await db.query(`CREATE INDEX IF NOT EXISTS idx_pending_tasks_expires ON "Pending_Tasks" (expires_at)`);
       await db.query(`CREATE INDEX IF NOT EXISTS idx_pending_tasks_operator ON "Pending_Tasks" (operator_id, status)`);
-      console.log('✅ Pending_Tasks table ready (with nullable bin_no, cfc, batch_no)');
+      console.log('✅ Pending_Tasks table ready');
     } catch (err) {
       console.error('⚠️ Error creating Pending_Tasks table:', err.message);
     }
@@ -4922,6 +4921,29 @@ app.listen(PORT, async () => {
     
     // Clean up expired sessions on startup
     await sessions.cleanupExpiredSessions();
+    
+    // Clean up orphaned holds on startup (in case server restarted)
+    try {
+      console.log('🧹 Checking for orphaned holds on startup...');
+      const orphanedBins = await db.query(`
+        SELECT bin_no, cfc_held FROM "Bins" WHERE cfc_held > 0
+      `);
+      
+      if (orphanedBins.rows.length > 0) {
+        console.log(`⚠️ Found ${orphanedBins.rows.length} bins with orphaned holds - clearing...`);
+        for (const bin of orphanedBins.rows) {
+          console.log(`  - ${bin.bin_no}: ${bin.cfc_held} CFC held`);
+        }
+        
+        // Reset all orphaned holds
+        await db.query(`UPDATE "Bins" SET cfc_held = 0 WHERE cfc_held > 0`);
+        console.log('✅ Orphaned holds cleared');
+      } else {
+        console.log('✅ No orphaned holds found');
+      }
+    } catch (err) {
+      console.log('⚠️ Could not check for orphaned holds:', err.message);
+    }
     
     // Auto-expiry background job for pending tasks
     const autoExpireTasks = async () => {
