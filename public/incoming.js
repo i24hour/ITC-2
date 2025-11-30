@@ -553,7 +553,7 @@ async function createPendingTaskWithTimer() {
     if (!user || !user.operatorId) return;
     
     try {
-        const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes from now
+        const expiresAt = new Date(Date.now() + 30 * 1000); // 30 seconds from now
         
         const response = await fetch('/api/pending-tasks/create', {
             method: 'POST',
@@ -587,9 +587,9 @@ async function createPendingTaskWithTimer() {
 let timerInterval = null;
 let timerEndTime = null;
 
-// Start 30-minute countdown timer
+// Start 30-second countdown timer
 function startTaskTimer() {
-    timerEndTime = Date.now() + 30 * 60 * 1000; // 30 minutes
+    timerEndTime = Date.now() + 30 * 1000; // 30 seconds
     
     // Update timer display every second
     timerInterval = setInterval(() => {

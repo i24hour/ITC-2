@@ -691,7 +691,7 @@ app.post('/api/admin/run-task-migration', async (req, res) => {
 app.post('/api/bins/hold', async (req, res) => {
   const client = await db.getClient();
   try {
-    const { operatorId, bins, sku, taskId, expiresIn = 1800 } = req.body;
+    const { operatorId, bins, sku, taskId, expiresIn = 30 } = req.body;
     
     if (!operatorId || !bins || bins.length === 0) {
       return res.status(400).json({ 
@@ -718,7 +718,8 @@ app.post('/api/bins/hold', async (req, res) => {
       
       // Check if bin has enough space
       const binCheck = await client.query(
-        `SELECT cfc_capacity, COALESCE(cfc_held, 0) as cfc_held,
+        `SELECT COALESCE(cfc_capacity, 240) as cfc_capacity, 
+                COALESCE(cfc_held, 0) as cfc_held,
                 (SELECT COALESCE(SUM(cfc), 0) FROM "Inventory" WHERE bin_no = $1) as cfc_filled
          FROM "Bins" WHERE bin_no = $1`,
         [binNo]
