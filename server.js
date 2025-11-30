@@ -767,6 +767,114 @@ app.post('/api/admin/reset-all-holds', async (req, res) => {
   }
 });
 
+// Diagnostic endpoint - Check database state
+app.get('/api/admin/diagnostic', async (req, res) => {
+  try {
+    const diagnostics = {
+      timestamp: new Date().toISOString(),
+      database: {},
+      issues: []
+    };
+
+    // Check Bins table
+    try {
+      const binsWithHolds = await db.query(`
+        SELECT bin_no, cfc_capacity, cfc_filled, cfc_held 
+        FROM "Bins" 
+        WHERE cfc_held > 0 OR bin_no IN ('A01', 'A02', 'A03')
+        ORDER BY bin_no
+      `);
+      diagnostics.database.bins = binsWithHolds.rows.map(b => ({
+        bin: b.bin_no,
+        capacity: b.cfc_capacity || 240,
+        filled: b.cfc_filled || 0,
+        held: b.cfc_held || 0,
+        available: (b.cfc_capacity || 240) - (b.cfc_filled || 0) - (b.cfc_held || 0)
+      }));
+      
+      const totalHeld = binsWithHolds.rows.reduce((sum, b) => sum + (b.cfc_held || 0), 0);
+      if (totalHeld > 0) {
+        diagnostics.issues.push(`${totalHeld} CFC currently held across ${binsWithHolds.rows.filter(b => b.cfc_held > 0).length} bins`);
+      }
+    } catch (err) {
+      diagnostics.issues.push(`Bins table error: ${err.message}`);
+    }
+
+    // Check Pending_Tasks
+    try {
+      const pendingTasks = await db.query(`
+        SELECT id, operator_id, sku, bins_held, created_at, expires_at, status,
+               EXTRACT(EPOCH FROM (expires_at - NOW())) as seconds_until_expiry
+        FROM "Pending_Tasks" 
+        WHERE status = 'pending'
+        ORDER BY created_at DESC
+        LIMIT 10
+      `);
+      diagnostics.database.pendingTasks = pendingTasks.rows.map(t => ({
+        id: t.id,
+        operator: t.operator_id,
+        sku: t.sku,
+        binsHeld: t.bins_held,
+        created: t.created_at,
+        expiresIn: Math.round(t.seconds_until_expiry) + 's',
+        status: t.status
+      }));
+      
+      if (pendingTasks.rows.length > 0) {
+        const withoutBinsHeld = pendingTasks.rows.filter(t => !t.bins_held);
+        if (withoutBinsHeld.length > 0) {
+          diagnostics.issues.push(`${withoutBinsHeld.length} pending tasks missing bins_held data - holds won't auto-release!`);
+        }
+      }
+    } catch (err) {
+      diagnostics.issues.push(`Pending_Tasks error: ${err.message}`);
+    }
+
+    // Check Bin_Holds table
+    try {
+      const binHolds = await db.query(`
+        SELECT hold_id, bin_no, cfc_held, task_id, status, created_at, expires_at
+        FROM "Bin_Holds" 
+        WHERE status = 'active'
+        ORDER BY created_at DESC
+        LIMIT 10
+      `);
+      diagnostics.database.binHolds = binHolds.rows;
+      
+      if (binHolds.rows.length > 0) {
+        const orphaned = binHolds.rows.filter(h => !h.task_id);
+        if (orphaned.length > 0) {
+          diagnostics.issues.push(`${orphaned.length} active holds without task_id - won't auto-release!`);
+        }
+      }
+    } catch (err) {
+      diagnostics.database.binHolds = null;
+      diagnostics.issues.push(`Bin_Holds table doesn't exist or error: ${err.message}`);
+    }
+
+    // Check if columns exist
+    try {
+      const columns = await db.query(`
+        SELECT column_name, data_type 
+        FROM information_schema.columns 
+        WHERE table_name = 'Pending_Tasks' AND column_name = 'bins_held'
+      `);
+      if (columns.rows.length === 0) {
+        diagnostics.issues.push('⚠️ CRITICAL: Pending_Tasks.bins_held column does NOT exist! Server needs restart.');
+      } else {
+        diagnostics.database.binsHeldColumn = columns.rows[0];
+      }
+    } catch (err) {
+      diagnostics.issues.push(`Schema check error: ${err.message}`);
+    }
+
+    res.json(diagnostics);
+  } catch (error) {
+    console.error('❌ Diagnostic error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== BIN HOLDING & TASK MANAGEMENT APIs ====================
 
 // Create bin holds when proceeding to scanning
