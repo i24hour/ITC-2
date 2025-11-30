@@ -644,6 +644,14 @@ app.post('/api/admin/run-task-migration', async (req, res) => {
     `);
     console.log('✅ Bins table updated with capacity columns');
     
+    // Update all existing bins to have capacity 240 and held 0
+    await client.query(`
+      UPDATE "Bins" 
+      SET cfc_capacity = 240, cfc_held = 0
+      WHERE cfc_capacity IS NULL OR cfc_held IS NULL
+    `);
+    console.log('✅ All bins updated with default capacity 240');
+    
     // Add columns to Pending_Tasks table
     await client.query(`
       ALTER TABLE "Pending_Tasks"
@@ -856,10 +864,10 @@ app.get('/api/bins/available-space/:binNo', async (req, res) => {
     const result = await client.query(
       `SELECT 
         b.bin_no,
-        b.cfc_capacity as capacity,
+        COALESCE(b.cfc_capacity, 240) as capacity,
         COALESCE(b.cfc_held, 0) as held,
         COALESCE((SELECT SUM(cfc) FROM "Inventory" WHERE bin_no = b.bin_no), 0) as filled,
-        b.cfc_capacity - COALESCE(b.cfc_held, 0) - COALESCE((SELECT SUM(cfc) FROM "Inventory" WHERE bin_no = b.bin_no), 0) as available
+        COALESCE(b.cfc_capacity, 240) - COALESCE(b.cfc_held, 0) - COALESCE((SELECT SUM(cfc) FROM "Inventory" WHERE bin_no = b.bin_no), 0) as available
        FROM "Bins" b
        WHERE b.bin_no = $1`,
       [binNo]
