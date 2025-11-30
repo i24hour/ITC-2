@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_WEBAPP_NAME: itc-warehouse-app-2025-c8hgg5deeagae5dj    # Your Azure Web App name
+  AZURE_WEBAPP_NAME: itc-warehouse-app-2025
   NODE_VERSION: '22.x'
 
 jobs:
