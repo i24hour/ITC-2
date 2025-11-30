@@ -22,24 +22,18 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
     
     - name: Install dependencies
-      run: npm ci --omit=dev || npm install --production
-    
-    - name: Create deployment package
-      run: |
-        zip -r deploy.zip . -x "*.git*" "node_modules/*" "*.csv" "*.xlsx" "*.pdf"
+      run: npm install --production
     
     - name: Deploy to Azure Web App
-      uses: azure/webapps-deploy@v3
+      uses: azure/webapps-deploy@v2
       with:
         app-name: ${{ env.AZURE_WEBAPP_NAME }}
         publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-        package: deploy.zip
     
     - name: Post-deployment notification
       if: success()
       run: |
         echo "✅ Deployment successful!"
-        echo "🌐 App URL: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+        echo "🌐 App URL: https://itc-warehouse-app-2025-c8hgg5deeagae5dj.centralindia-01.azurewebsites.net"
