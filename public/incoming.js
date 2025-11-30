@@ -479,20 +479,24 @@ async function savePendingTask() {
 
 // ===== STEP 3: QR Scanner =====
 async function goToStep3() {
-    // Create bin holds before proceeding
-    const holdsCreated = await createBinHolds();
+    // Create pending task FIRST to get task ID
+    const taskId = await createPendingTaskWithTimer();
+    if (!taskId) {
+        alert('Failed to create pending task. Please try again.');
+        return;
+    }
+    
+    // Create bin holds with the task ID
+    const holdsCreated = await createBinHolds(taskId);
     if (!holdsCreated) {
         alert('Failed to reserve bin space. Please try again.');
         return;
     }
     
-    // Create pending task with 30-minute expiry
-    await createPendingTaskWithTimer();
-    
     document.getElementById('step2').classList.remove('active');
     document.getElementById('step3').classList.add('active');
     
-    // Start 30-minute timer
+    // Start 30-second timer
     startTaskTimer();
     
     // Create task for supervisor monitoring
@@ -509,7 +513,7 @@ async function goToStep3() {
 }
 
 // Create bin holds for selected bins
-async function createBinHolds() {
+async function createBinHolds(taskId) {
     const user = JSON.parse(localStorage.getItem('user'));
     if (!user || !user.operatorId) return false;
     
@@ -527,7 +531,7 @@ async function createBinHolds() {
                 bins: bins,
                 operatorId: user.operatorId,
                 sku: incomingData.sku,
-                taskId: null // Will be set when pending task is created
+                taskId: taskId // Link holds to the pending task
             })
         });
         
@@ -547,10 +551,10 @@ async function createBinHolds() {
     }
 }
 
-// Create pending task with 30-minute timer
+// Create pending task with 30-second timer
 async function createPendingTaskWithTimer() {
     const user = JSON.parse(localStorage.getItem('user'));
-    if (!user || !user.operatorId) return;
+    if (!user || !user.operatorId) return null;
     
     try {
         const expiresAt = new Date(Date.now() + 30 * 1000); // 30 seconds from now
@@ -577,9 +581,12 @@ async function createPendingTaskWithTimer() {
         if (result.success) {
             currentTaskId = result.task.id;
             console.log('✅ Pending task created with ID:', currentTaskId);
+            return currentTaskId; // Return the task ID
         }
+        return null;
     } catch (error) {
         console.error('Error creating pending task:', error);
+        return null;
     }
 }
 
