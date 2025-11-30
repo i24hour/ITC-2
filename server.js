@@ -1806,8 +1806,8 @@ app.post('/api/pending-tasks/create', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields: operatorId, taskType, sku' });
     }
     
-    // Set expiration time (30 minutes from now)
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    // Set expiration time (30 seconds from now)
+    const expiresAt = new Date(Date.now() + 30 * 1000);
     
     const result = await client.query(`
       INSERT INTO "Pending_Tasks" (operator_id, task_type, sku, bin_no, cfc, weight, batch_no, expires_at)
