@@ -2090,14 +2090,14 @@ app.post('/api/pending-tasks/create', async (req, res) => {
     // Set expiration time (30 seconds from now)
     const expiresAt = new Date(Date.now() + 30 * 1000);
     
-    // Store bins_held as JSON for auto-expiry fallback
-    const binsHeldJson = binsHeld ? JSON.stringify(binsHeld) : null;
+    // Store bins_held as JSONB (don't stringify - PostgreSQL handles it)
+    const binsHeldData = binsHeld || null;
     
     const result = await client.query(`
       INSERT INTO "Pending_Tasks" (operator_id, task_type, sku, bin_no, cfc, weight, batch_no, bins_held, expires_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
       RETURNING *
-    `, [operatorId, taskType, sku, binNo || null, cfc || null, weight || null, batchNo || null, binsHeldJson, expiresAt]);
+    `, [operatorId, taskType, sku, binNo || null, cfc || null, weight || null, batchNo || null, binsHeldData ? JSON.stringify(binsHeldData) : null, expiresAt]);
     
     console.log(`✅ Pending task created: ${taskType} - ${sku} (${cfc || 0} CFC, Bin: ${binNo || 'Not selected'})`);
     if (binsHeld && binsHeld.length > 0) {
