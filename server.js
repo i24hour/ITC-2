@@ -5054,6 +5054,61 @@ app.listen(PORT, async () => {
     setInterval(autoExpireTasks, 10000);
     console.log('⏰ Auto-expiry background job started (runs every 10 seconds)');
     
+    // Auto-cleanup for expired Bin_Holds (independent of Pending_Tasks)
+    const autoCleanupExpiredHolds = async () => {
+      try {
+        const expiredHolds = await db.query(`
+          SELECT * FROM "Bin_Holds" 
+          WHERE status = 'active' AND expires_at < NOW()
+        `);
+        
+        if (expiredHolds.rows.length > 0) {
+          console.log(`🔓 Found ${expiredHolds.rows.length} expired hold(s), releasing...`);
+          
+          const client = await db.connect();
+          try {
+            await client.query('BEGIN');
+            
+            for (const hold of expiredHolds.rows) {
+              // Release the hold from Bins table
+              await client.query(`
+                UPDATE "Bins" 
+                SET cfc_held = GREATEST(0, cfc_held - $1)
+                WHERE bin_no = $2
+              `, [hold.cfc_held, hold.bin_no]);
+              
+              console.log(`  ✅ Released ${hold.cfc_held} CFC from bin ${hold.bin_no} (Hold ID: ${hold.hold_id})`);
+            }
+            
+            // Mark all expired holds as released
+            await client.query(`
+              UPDATE "Bin_Holds" 
+              SET status = 'expired', updated_at = NOW()
+              WHERE status = 'active' AND expires_at < NOW()
+            `);
+            
+            await client.query('COMMIT');
+            console.log(`✅ All expired holds released and marked as expired`);
+          } catch (err) {
+            await client.query('ROLLBACK');
+            console.error(`❌ Error cleaning up expired holds:`, err.message);
+          } finally {
+            client.release();
+          }
+        }
+      } catch (err) {
+        console.error('❌ Auto-cleanup holds job error:', err.message);
+      }
+    };
+    
+    // Run hold cleanup immediately on startup
+    console.log('🚀 Running hold cleanup on startup...');
+    await autoCleanupExpiredHolds();
+    
+    // Schedule to run every 10 seconds (same frequency as task expiry)
+    setInterval(autoCleanupExpiredHolds, 10000);
+    console.log('⏰ Auto-cleanup holds background job started (runs every 10 seconds)');
+    
     // Also run a cleanup on all bins with held space on startup
     try {
       const binsWithHolds = await db.query('SELECT bin_no, cfc_held FROM "Bins" WHERE cfc_held > 0');
