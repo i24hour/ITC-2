@@ -1228,27 +1228,36 @@ app.post('/api/auth/login', async (req, res) => {
     // FIRST: Check in Supervisors table
     try {
       const supervisorResult = await client.query(
-        `SELECT supervisor_id, name, email, password_hash FROM "Supervisors" WHERE email = $1`,
+        `SELECT supervisor_id, name, email, password_hash, password FROM "Supervisors" WHERE email = $1`,
         [email]
       );
       
       if (supervisorResult.rows.length > 0) {
         const supervisor = supervisorResult.rows[0];
         
-        // Check password (plain text for now)
-        if (password && supervisor.password_hash === password) {
+        // Check password - try both password_hash and password columns
+        const storedPassword = supervisor.password || supervisor.password_hash;
+        
+        if (!password) {
+          return res.status(400).json({ 
+            error: 'Password is required',
+            success: false 
+          });
+        }
+        
+        if (storedPassword && storedPassword === password) {
           userId = supervisor.supervisor_id;
           userName = supervisor.name;
           userRole = 'supervisor';
           useNewStructure = true;
           
           console.log('✅ Supervisor login successful:', userId);
-        } else if (!password) {
-          // No password validation needed for now
-          userId = supervisor.supervisor_id;
-          userName = supervisor.name;
-          userRole = 'supervisor';
-          useNewStructure = true;
+        } else {
+          console.log('❌ Invalid password for supervisor:', email);
+          return res.status(401).json({ 
+            error: 'Invalid email or password',
+            success: false 
+          });
         }
       }
     } catch (err) {
@@ -1259,34 +1268,57 @@ app.post('/api/auth/login', async (req, res) => {
     if (!userId) {
       try {
         const operatorResult = await client.query(
-          `SELECT operator_id, name, email FROM "Operators" WHERE email = $1`,
+          `SELECT operator_id, name, email, password_hash FROM "Operators" WHERE email = $1`,
           [email]
         );
         
         if (operatorResult.rows.length > 0) {
-          // Operator found in new structure
+          // Operator found - validate password
           const operator = operatorResult.rows[0];
-          userId = operator.operator_id;
-          userName = operator.name;
-          userRole = 'operator';
-          useNewStructure = true;
           
-          // Update last login
-          await client.query(
-            `UPDATE "Operators" SET last_login = CURRENT_TIMESTAMP WHERE operator_id = $1`,
-            [userId]
-          );
+          if (!password) {
+            return res.status(400).json({ 
+              error: 'Password is required',
+              success: false 
+            });
+          }
           
-          console.log('✅ Operator login successful:', userId);
+          // Check password
+          if (operator.password_hash && operator.password_hash === password) {
+            userId = operator.operator_id;
+            userName = operator.name;
+            userRole = 'operator';
+            useNewStructure = true;
+            
+            // Update last login
+            await client.query(
+              `UPDATE "Operators" SET last_login = CURRENT_TIMESTAMP WHERE operator_id = $1`,
+              [userId]
+            );
+            
+            console.log('✅ Operator login successful:', userId);
+          } else {
+            console.log('❌ Invalid password for operator:', email);
+            return res.status(401).json({ 
+              error: 'Invalid email or password',
+              success: false 
+            });
+          }
         } else {
-          // Operators table exists but user not found - allow session-only login
-          console.log('User not found in Operators table, creating session-only login');
-          userId = email;
+          // Operators table exists but user not found - REJECT LOGIN
+          console.log('❌ User not found in Operators table');
+          return res.status(401).json({ 
+            error: 'Invalid credentials. User not found in database.',
+            success: false 
+          });
         }
       } catch (err) {
-        // Operators table doesn't exist - use session-only auth
-        console.log('Operators table not found, using session-only auth:', err.message);
-        userId = email;
+        // Operators table doesn't exist - REJECT LOGIN
+        console.log('❌ Database error:', err.message);
+        return res.status(500).json({ 
+          error: 'Database error. Please contact administrator.',
+          success: false 
+        });
       }
     }
     
