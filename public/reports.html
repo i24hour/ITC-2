@@ -35,6 +35,17 @@
                     <option value="custom">Custom Range</option>
                 </select>
             </div>
+            
+            <!-- Custom Date Range Inputs (hidden by default) -->
+            <div class="filter-group" id="custom-date-group" style="display: none;">
+                <label for="from-date">From Date:</label>
+                <input type="date" id="from-date" class="date-input">
+            </div>
+            <div class="filter-group" id="custom-date-to-group" style="display: none;">
+                <label for="to-date">To Date:</label>
+                <input type="date" id="to-date" class="date-input">
+            </div>
+            
             <div class="filter-group">
                 <label for="report-type">Report Type:</label>
                 <select id="report-type">

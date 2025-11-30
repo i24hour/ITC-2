@@ -19,13 +19,38 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initReports() {
+    // Set default dates
+    const today = new Date();
+    const toDateInput = document.getElementById('to-date');
+    const fromDateInput = document.getElementById('from-date');
+    
+    toDateInput.value = today.toISOString().split('T')[0];
+    const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    fromDateInput.value = lastWeek.toISOString().split('T')[0];
+    
+    // Show/hide custom date inputs based on selection
+    document.getElementById('date-range').addEventListener('change', (e) => {
+        const customGroup = document.getElementById('custom-date-group');
+        const customGroupTo = document.getElementById('custom-date-to-group');
+        
+        if (e.target.value === 'custom') {
+            customGroup.style.display = 'block';
+            customGroupTo.style.display = 'block';
+        } else {
+            customGroup.style.display = 'none';
+            customGroupTo.style.display = 'none';
+        }
+    });
+    
     // Generate report button
     document.getElementById('generate-report').addEventListener('click', () => {
         const dateRange = document.getElementById('date-range').value;
         const reportType = document.getElementById('report-type').value;
+        const fromDate = document.getElementById('from-date').value;
+        const toDate = document.getElementById('to-date').value;
         
-        console.log('Generating report:', { dateRange, reportType });
-        generateReport(dateRange, reportType);
+        console.log('Generating report:', { dateRange, reportType, fromDate, toDate });
+        generateReport(dateRange, reportType, fromDate, toDate);
     });
 
     // Export report button
@@ -48,7 +73,7 @@ async function loadReportData() {
     console.log('Loading report data...');
 }
 
-async function generateReport(dateRange, reportType) {
+async function generateReport(dateRange, reportType, fromDate, toDate) {
     try {
         const reportOutput = document.getElementById('report-output');
         const reportContent = document.getElementById('report-content');
@@ -57,8 +82,17 @@ async function generateReport(dateRange, reportType) {
         reportOutput.style.display = 'block';
         reportContent.innerHTML = '<p style="text-align: center; padding: 40px;">Loading report data...</p>';
         
+        // Build query parameters
+        let queryParams = `type=${reportType}`;
+        
+        if (dateRange === 'custom' && fromDate && toDate) {
+            queryParams += `&dateRange=custom&fromDate=${fromDate}&toDate=${toDate}`;
+        } else {
+            queryParams += `&dateRange=${dateRange}`;
+        }
+        
         // Fetch data from API
-        const response = await fetch(`/api/reports?type=${reportType}&dateRange=${dateRange}`);
+        const response = await fetch(`/api/reports?${queryParams}`);
         
         if (!response.ok) {
             throw new Error(`Server error: ${response.status}`);

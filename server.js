@@ -3451,32 +3451,45 @@ app.get('/api/bins/qr-all', async (req, res) => {
 app.get('/api/reports', async (req, res) => {
   const client = await db.getClient();
   try {
-    const { type, dateRange } = req.query;
+    const { type, dateRange, fromDate, toDate } = req.query;
     
     // Debug logging
     console.log('=== REPORTS API CALLED ===');
     console.log('Report Type:', type);
     console.log('Date Range:', dateRange);
+    console.log('From Date:', fromDate);
+    console.log('To Date:', toDate);
     console.log('Query params:', req.query);
     
     // Calculate date filter based on range
     let dateFilter = '';
     const now = new Date();
     
-    switch(dateRange) {
-      case 'today':
-        dateFilter = `AND DATE(incoming_date) = CURRENT_DATE`;
-        break;
-      case 'week':
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        dateFilter = `AND incoming_date >= '${weekAgo.toISOString()}'`;
-        break;
-      case 'month':
-        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        dateFilter = `AND incoming_date >= '${monthAgo.toISOString()}'`;
-        break;
-      default:
-        dateFilter = '';
+    if (dateRange === 'custom' && fromDate && toDate) {
+      // Custom date range
+      const from = new Date(fromDate);
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(toDate);
+      to.setHours(23, 59, 59, 999);
+      
+      dateFilter = `AND incoming_date >= '${from.toISOString()}' AND incoming_date <= '${to.toISOString()}'`;
+    } else {
+      // Predefined ranges
+      switch(dateRange) {
+        case 'today':
+          dateFilter = `AND DATE(incoming_date) = CURRENT_DATE`;
+          break;
+        case 'week':
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          dateFilter = `AND incoming_date >= '${weekAgo.toISOString()}'`;
+          break;
+        case 'month':
+          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          dateFilter = `AND incoming_date >= '${monthAgo.toISOString()}'`;
+          break;
+        default:
+          dateFilter = '';
+      }
     }
     
     let data = {};
@@ -3504,7 +3517,15 @@ app.get('/api/reports', async (req, res) => {
       try {
         // Build date filter for outgoing table
         let outgoingDateFilter = '';
-        if (dateRange) {
+        
+        if (dateRange === 'custom' && fromDate && toDate) {
+          const from = new Date(fromDate);
+          from.setHours(0, 0, 0, 0);
+          const to = new Date(toDate);
+          to.setHours(23, 59, 59, 999);
+          
+          outgoingDateFilter = `AND outgoing_date >= '${from.toISOString()}' AND outgoing_date <= '${to.toISOString()}'`;
+        } else if (dateRange) {
           switch(dateRange) {
             case 'today':
               outgoingDateFilter = `AND DATE(outgoing_date) = CURRENT_DATE`;
