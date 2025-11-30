@@ -1604,6 +1604,13 @@ app.get('/api/bins/available', async (req, res) => {
       console.log(`🔒 Locked bins for ${taskType}:`, lockedBins);
     }
     
+    // Get all bin held quantities
+    const heldBinsResult = await db.query(`
+      SELECT bin_no, COALESCE(cfc_held, 0) as cfc_held 
+      FROM "Bins"
+    `);
+    const heldMap = new Map(heldBinsResult.rows.map(r => [r.bin_no, r.cfc_held]));
+    
     // Try new table structure first
     try {
       // Get bins with the requested SKU from Inventory (grouped by bin_no to combine batches)
@@ -1654,14 +1661,16 @@ app.get('/api/bins/available', async (req, res) => {
       }
       
       const currentQty = row.cfc; // Now this is SUM of all batches in this bin
-      const available = capacity - currentQty;
+      const heldQty = heldMap.get(row.bin_no) || 0;
+      const available = capacity - currentQty - heldQty;
       
       const binData = {
         id: row.bin_no,
         sku: sku,
         current: currentQty,
         capacity: capacity,
-        available: Math.max(0, available)
+        available: Math.max(0, available),
+        held: heldQty
         // batch field removed because multiple batches are combined
       };
       
@@ -1683,12 +1692,15 @@ app.get('/api/bins/available', async (req, res) => {
         return;
       }
       
+      const heldQty = heldMap.get(row.bin_no) || 0;
+      
       emptyBins.push({
         id: row.bin_no,
         sku: null,
         current: 0,
         capacity: capacity,
-        available: capacity,
+        available: capacity - heldQty,
+        held: heldQty,
         batch: null
       });
     });
