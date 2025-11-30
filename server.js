@@ -1872,7 +1872,7 @@ app.get('/api/bins/fifo', async (req, res) => {
 app.post('/api/pending-tasks/create', async (req, res) => {
   const client = await db.getClient();
   try {
-    const { operatorId, taskType, sku, binNo, cfc, weight, batchNo } = req.body;
+    const { operatorId, taskType, sku, binNo, cfc, weight, batchNo, binsHeld } = req.body;
     
     // Only operatorId, taskType, and sku are required
     // binNo can be null if task is saved before bin selection
@@ -1883,13 +1883,19 @@ app.post('/api/pending-tasks/create', async (req, res) => {
     // Set expiration time (30 seconds from now)
     const expiresAt = new Date(Date.now() + 30 * 1000);
     
+    // Store bins_held as JSON for auto-expiry fallback
+    const binsHeldJson = binsHeld ? JSON.stringify(binsHeld) : null;
+    
     const result = await client.query(`
-      INSERT INTO "Pending_Tasks" (operator_id, task_type, sku, bin_no, cfc, weight, batch_no, expires_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO "Pending_Tasks" (operator_id, task_type, sku, bin_no, cfc, weight, batch_no, bins_held, expires_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
-    `, [operatorId, taskType, sku, binNo || null, cfc || null, weight || null, batchNo || null, expiresAt]);
+    `, [operatorId, taskType, sku, binNo || null, cfc || null, weight || null, batchNo || null, binsHeldJson, expiresAt]);
     
     console.log(`✅ Pending task created: ${taskType} - ${sku} (${cfc || 0} CFC, Bin: ${binNo || 'Not selected'})`);
+    if (binsHeld && binsHeld.length > 0) {
+      console.log(`   Bins held:`, binsHeld);
+    }
     
     res.json({
       success: true,
@@ -4684,6 +4690,7 @@ app.listen(PORT, async () => {
           cfc INTEGER,
           weight DECIMAL(10,2),
           batch_no VARCHAR(50),
+          bins_held JSONB,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           expires_at TIMESTAMP NOT NULL,
           status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'expired'))
