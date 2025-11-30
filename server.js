@@ -890,6 +890,90 @@ app.get('/api/admin/diagnostic', async (req, res) => {
   }
 });
 
+// Manual trigger for auto-expiry (for testing)
+app.post('/api/admin/trigger-auto-expiry', async (req, res) => {
+  try {
+    console.log('🔧 Manually triggering auto-expiry...');
+    
+    // Find all pending tasks
+    const allTasks = await db.query(`
+      SELECT *, 
+        EXTRACT(EPOCH FROM (NOW() - expires_at)) as seconds_past_expiry
+      FROM "Pending_Tasks" 
+      WHERE status = 'pending'
+      ORDER BY created_at DESC
+    `);
+    
+    console.log(`Found ${allTasks.rows.length} pending tasks`);
+    
+    // Find expired tasks
+    const expiredTasks = await db.query(`
+      SELECT * FROM "Pending_Tasks" 
+      WHERE expires_at < NOW() AND status = 'pending'
+    `);
+    
+    if (expiredTasks.rows.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No expired tasks found',
+        allTasks: allTasks.rows.map(t => ({
+          id: t.id,
+          sku: t.sku,
+          secondsPastExpiry: Math.round(t.seconds_past_expiry),
+          binsHeld: t.bins_held
+        }))
+      });
+    }
+    
+    console.log(`⏰ Processing ${expiredTasks.rows.length} expired task(s)...`);
+    const results = [];
+    
+    for (const task of expiredTasks.rows) {
+      const client = await db.connect();
+      try {
+        await client.query('BEGIN');
+        
+        const taskResult = { taskId: task.id, sku: task.sku, holdsReleased: [] };
+        
+        // Parse bins_held
+        if (task.bins_held) {
+          const binsHeld = typeof task.bins_held === 'string' ? JSON.parse(task.bins_held) : task.bins_held;
+          console.log(`  Task ${task.id} bins_held:`, binsHeld);
+          
+          for (const hold of binsHeld) {
+            await client.query(`
+              UPDATE "Bins" 
+              SET cfc_held = GREATEST(0, COALESCE(cfc_held, 0) - $1)
+              WHERE bin_no = $2
+            `, [hold.cfc, hold.binNo]);
+            taskResult.holdsReleased.push({ bin: hold.binNo, cfc: hold.cfc });
+          }
+        }
+        
+        // Delete pending task
+        await client.query('DELETE FROM "Pending_Tasks" WHERE id = $1', [task.id]);
+        
+        await client.query('COMMIT');
+        results.push(taskResult);
+      } catch (err) {
+        await client.query('ROLLBACK');
+        results.push({ taskId: task.id, error: err.message });
+      } finally {
+        client.release();
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Processed ${results.length} expired tasks`,
+      results: results
+    });
+  } catch (error) {
+    console.error('❌ Manual auto-expiry error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== BIN HOLDING & TASK MANAGEMENT APIs ====================
 
 // Create bin holds when proceeding to scanning
