@@ -687,13 +687,24 @@ app.post('/api/admin/run-task-migration', async (req, res) => {
     `);
     console.log('✅ Bins table updated with capacity columns');
     
-    // Update all existing bins to have capacity 240 and held 0
-    await client.query(`
+    // Update all existing bins to have capacity 240 and RESET all holds to 0
+    const updateResult = await client.query(`
       UPDATE "Bins" 
       SET cfc_capacity = 240, cfc_held = 0
-      WHERE cfc_capacity IS NULL OR cfc_held IS NULL
     `);
-    console.log('✅ All bins updated with default capacity 240');
+    console.log(`✅ All ${updateResult.rowCount} bins updated with capacity 240 and holds reset to 0`);
+    
+    // Mark all active holds as released
+    try {
+      const holdsResult = await client.query(`
+        UPDATE "Bin_Holds" 
+        SET status = 'released', updated_at = NOW()
+        WHERE status = 'active'
+      `);
+      console.log(`✅ Marked ${holdsResult.rowCount} active holds as released`);
+    } catch (holdErr) {
+      console.log('⚠️ Bin_Holds table does not exist yet (will be created)');
+    }
     
     // Add columns to Pending_Tasks table
     await client.query(`
@@ -779,20 +790,24 @@ app.get('/api/admin/diagnostic', async (req, res) => {
     // Check Bins table
     try {
       const binsWithHolds = await db.query(`
-        SELECT bin_no, cfc_capacity, cfc_filled, cfc_held 
-        FROM "Bins" 
-        WHERE cfc_held > 0 OR bin_no IN ('A01', 'A02', 'A03')
-        ORDER BY bin_no
+        SELECT 
+          b.bin_no,
+          COALESCE(b.cfc_capacity, 240) as cfc_capacity,
+          COALESCE(b.cfc_held, 0) as cfc_held,
+          COALESCE((SELECT SUM(cfc) FROM "Inventory" WHERE bin_no = b.bin_no), 0) as cfc_filled
+        FROM "Bins" b
+        WHERE b.cfc_held > 0 OR b.bin_no IN ('A01', 'A02', 'A03')
+        ORDER BY b.bin_no
       `);
       diagnostics.database.bins = binsWithHolds.rows.map(b => ({
         bin: b.bin_no,
-        capacity: b.cfc_capacity || 240,
-        filled: b.cfc_filled || 0,
-        held: b.cfc_held || 0,
-        available: (b.cfc_capacity || 240) - (b.cfc_filled || 0) - (b.cfc_held || 0)
+        capacity: b.cfc_capacity,
+        filled: b.cfc_filled,
+        held: b.cfc_held,
+        available: b.cfc_capacity - b.cfc_filled - b.cfc_held
       }));
       
-      const totalHeld = binsWithHolds.rows.reduce((sum, b) => sum + (b.cfc_held || 0), 0);
+      const totalHeld = binsWithHolds.rows.reduce((sum, b) => sum + b.cfc_held, 0);
       if (totalHeld > 0) {
         diagnostics.issues.push(`${totalHeld} CFC currently held across ${binsWithHolds.rows.filter(b => b.cfc_held > 0).length} bins`);
       }
