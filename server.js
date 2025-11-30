@@ -583,6 +583,22 @@ app.post('/api/admin/empty-all-tables', async (req, res) => {
       }
     }
     
+    res.json({
+      success: true,
+      message: 'All transaction tables emptied successfully',
+      results: results
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to empty tables:', error);
+    res.status(500).json({ 
+      error: error.message,
+      stack: error.stack 
+    });
+  } finally {
+    client.release();
+  }
+});
 
 // Run task management database migration
 app.post('/api/admin/run-task-migration', async (req, res) => {
@@ -663,23 +679,6 @@ app.post('/api/admin/run-task-migration', async (req, res) => {
       success: false,
       message: 'Migration failed',
       error: error.message
-    });
-  } finally {
-    client.release();
-  }
-});
-
-    res.json({
-      success: true,
-      message: 'All transaction tables emptied successfully',
-      results: results
-    });
-    
-  } catch (error) {
-    console.error('❌ Failed to empty tables:', error);
-    res.status(500).json({ 
-      error: error.message,
-      stack: error.stack 
     });
   } finally {
     client.release();
