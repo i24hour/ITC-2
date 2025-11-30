@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_WEBAPP_NAME: itc-warehouse-app    # Replace with your Azure Web App name
-  NODE_VERSION: '18.x'
+  AZURE_WEBAPP_NAME: itc-warehouse-app-2025    # Your Azure Web App name
+  NODE_VERSION: '22.x'
 
 jobs:
   build-and-deploy:
@@ -25,24 +25,14 @@ jobs:
         cache: 'npm'
     
     - name: Install dependencies
-      run: npm ci --production
-    
-    - name: Create deployment package
-      run: |
-        zip -r deployment.zip . \
-          -x "*.git*" \
-          -x "*.xlsx" \
-          -x "node_modules/*" \
-          -x "*.md" \
-          -x "test-db.js" \
-          -x "setup-postgres.*"
+      run: npm ci --omit=dev || npm install --production
     
     - name: Deploy to Azure Web App
       uses: azure/webapps-deploy@v2
       with:
         app-name: ${{ env.AZURE_WEBAPP_NAME }}
         publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-        package: deployment.zip
+        package: .
     
     - name: Post-deployment notification
       if: success()

@@ -1,12 +1,12 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
+# DISABLED: This workflow uses OIDC credentials which need to be reconfigured
+# Use azure-deploy.yml instead
 
-name: Build and deploy Node.js app to Azure Web App - itc-warehouse-app-2025
+name: Build and deploy Node.js app to Azure Web App - itc-warehouse-app-2025 (DISABLED)
 
 on:
-  push:
-    branches:
-      - main
+  # Disabled - not triggered automatically
   workflow_dispatch:
 
 jobs:
