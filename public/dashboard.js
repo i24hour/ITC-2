@@ -308,8 +308,8 @@ async function loadPendingTasks() {
                         <span style="background: ${task.task_type === 'incoming' ? '#4CAF50' : '#2196F3'}; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
                             ${task.task_type === 'incoming' ? '📥 INCOMING' : '📤 OUTGOING'}
                         </span>
-                        <span class="timer" data-seconds="${totalSeconds}" style="font-size: 18px; font-weight: bold; color: ${totalSeconds < 300 ? '#f44336' : '#4CAF50'};">
-                            ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}
+                        <span class="timer" data-seconds="${totalSeconds}" style="font-size: 18px; font-weight: bold; color: ${totalSeconds < 15 ? '#f44336' : '#4CAF50'};">
+                            ${String(seconds).padStart(2, '0')}s
                         </span>
                     </div>
                     <div style="font-size: 14px; color: #333;">
@@ -363,12 +363,10 @@ function updateTimers() {
             seconds--;
             timer.dataset.seconds = seconds;
             
-            const minutes = Math.floor(seconds / 60);
-            const secs = seconds % 60;
-            timer.textContent = `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            timer.textContent = `${String(seconds).padStart(2, '0')}s`;
             
-            // Change color when less than 5 minutes
-            if (seconds < 300) {
+            // Change color when less than 15 seconds
+            if (seconds < 15) {
                 timer.style.color = '#f44336';
             }
             

@@ -745,18 +745,21 @@ app.post('/api/bins/hold', async (req, res) => {
       }
       
       // Create hold
+      console.log(`Creating hold: Bin ${binNo}, SKU ${binSku}, CFC ${cfcToHold}, Operator ${operatorId}`);
       const holdResult = await client.query(
         `INSERT INTO "Bin_Holds" (bin_no, sku, cfc_held, operator_id, task_id, expires_at)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING hold_id`,
         [binNo, binSku, cfcToHold, operatorId, taskId, expiresAt]
       );
+      console.log(`✅ Hold created with ID: ${holdResult.rows[0].hold_id}`);
       
       // Update bin's held count
       await client.query(
         `UPDATE "Bins" SET cfc_held = COALESCE(cfc_held, 0) + $1 WHERE bin_no = $2`,
         [cfcToHold, binNo]
       );
+      console.log(`✅ Updated bin ${binNo} held count by +${cfcToHold}`);
       
       holds.push({
         holdId: holdResult.rows[0].hold_id,
