@@ -736,6 +736,37 @@ app.post('/api/admin/run-task-migration', async (req, res) => {
   }
 });
 
+// Reset all held space (emergency cleanup)
+app.post('/api/admin/reset-all-holds', async (req, res) => {
+  try {
+    console.log('🧹 Resetting all held space...');
+    
+    // Reset all bins cfc_held to 0
+    const result = await db.query(`UPDATE "Bins" SET cfc_held = 0 WHERE cfc_held > 0`);
+    console.log(`✅ Reset ${result.rowCount} bins with held space`);
+    
+    // Mark all active holds as released (if table exists)
+    try {
+      const holdsResult = await db.query(`
+        UPDATE "Bin_Holds" 
+        SET status = 'released', updated_at = NOW() 
+        WHERE status = 'active'
+      `);
+      console.log(`✅ Marked ${holdsResult.rowCount} active holds as released`);
+    } catch (err) {
+      console.log('⚠️ Bin_Holds table might not exist:', err.message);
+    }
+    
+    res.json({ 
+      success: true, 
+      message: `Reset complete. ${result.rowCount} bins cleaned.`
+    });
+  } catch (error) {
+    console.error('❌ Failed to reset holds:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== BIN HOLDING & TASK MANAGEMENT APIs ====================
 
 // Create bin holds when proceeding to scanning
@@ -4695,28 +4726,58 @@ app.listen(PORT, async () => {
             try {
               await client.query('BEGIN');
               
-              // Release bin holds for this task
-              const holds = await client.query(`
-                SELECT * FROM "Bin_Holds" 
-                WHERE task_id = $1 AND status = 'active'
-              `, [task.id]);
-              
-              if (holds.rows.length > 0) {
-                // Update each bin's held space
-                for (const hold of holds.rows) {
-                  await client.query(`
-                    UPDATE "Bins" 
-                    SET cfc_held = GREATEST(0, cfc_held - $1)
-                    WHERE bin_no = $2
-                  `, [hold.cfc_held, hold.bin_no]);
-                }
-                
-                // Mark holds as released
-                await client.query(`
-                  UPDATE "Bin_Holds" 
-                  SET status = 'released', updated_at = NOW()
+              // Try to release holds from Bin_Holds table
+              let holdsReleased = false;
+              try {
+                const holds = await client.query(`
+                  SELECT * FROM "Bin_Holds" 
                   WHERE task_id = $1 AND status = 'active'
                 `, [task.id]);
+                
+                if (holds.rows.length > 0) {
+                  console.log(`📦 Releasing ${holds.rows.length} hold(s) for task ${task.id}`);
+                  // Update each bin's held space
+                  for (const hold of holds.rows) {
+                    await client.query(`
+                      UPDATE "Bins" 
+                      SET cfc_held = GREATEST(0, cfc_held - $1)
+                      WHERE bin_no = $2
+                    `, [hold.cfc_held, hold.bin_no]);
+                    console.log(`  ✅ Released ${hold.cfc_held} CFC from bin ${hold.bin_no}`);
+                  }
+                  
+                  // Mark holds as released
+                  await client.query(`
+                    UPDATE "Bin_Holds" 
+                    SET status = 'released', updated_at = NOW()
+                    WHERE task_id = $1 AND status = 'active'
+                  `, [task.id]);
+                  holdsReleased = true;
+                }
+              } catch (binHoldsErr) {
+                // Bin_Holds table might not exist - parse bins_held from task
+                console.log(`⚠️ Bin_Holds table error (might not exist): ${binHoldsErr.message}`);
+                if (task.bins_held) {
+                  try {
+                    const binsHeld = JSON.parse(task.bins_held);
+                    console.log(`📦 Releasing holds from task.bins_held:`, binsHeld);
+                    for (const hold of binsHeld) {
+                      await client.query(`
+                        UPDATE "Bins" 
+                        SET cfc_held = GREATEST(0, COALESCE(cfc_held, 0) - $1)
+                        WHERE bin_no = $2
+                      `, [hold.cfc, hold.binNo]);
+                      console.log(`  ✅ Released ${hold.cfc} CFC from bin ${hold.binNo}`);
+                    }
+                    holdsReleased = true;
+                  } catch (parseErr) {
+                    console.error(`❌ Failed to parse bins_held: ${parseErr.message}`);
+                  }
+                }
+              }
+              
+              if (!holdsReleased) {
+                console.log(`⚠️ No holds found to release for task ${task.id}`);
               }
               
               // Move to Task_History with incomplete status
@@ -4750,11 +4811,23 @@ app.listen(PORT, async () => {
     };
     
     // Run immediately on startup
+    console.log('🚀 Running auto-expiry on startup...');
     await autoExpireTasks();
     
     // Schedule to run every 10 seconds (faster cleanup)
     setInterval(autoExpireTasks, 10000);
     console.log('⏰ Auto-expiry background job started (runs every 10 seconds)');
+    
+    // Also run a cleanup on all bins with held space on startup
+    try {
+      const binsWithHolds = await db.query('SELECT bin_no, cfc_held FROM "Bins" WHERE cfc_held > 0');
+      if (binsWithHolds.rows.length > 0) {
+        console.log(`🧹 Found ${binsWithHolds.rows.length} bin(s) with held space on startup:`);
+        binsWithHolds.rows.forEach(b => console.log(`  - ${b.bin_no}: ${b.cfc_held} CFC held`));
+      }
+    } catch (err) {
+      console.log('⚠️ Could not check bins with holds:', err.message);
+    }
     
     // Schedule periodic cleanup (every hour)
     setInterval(async () => {
