@@ -600,6 +600,49 @@ app.post('/api/admin/empty-all-tables', async (req, res) => {
   }
 });
 
+// Clean up orphaned holds and reset bin held counts
+app.post('/api/admin/cleanup-holds', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    
+    // Release all active holds older than 2 minutes
+    const oldHolds = await client.query(`
+      SELECT * FROM "Bin_Holds" 
+      WHERE status = 'active' AND created_at < NOW() - INTERVAL '2 minutes'
+    `);
+    
+    for (const hold of oldHolds.rows) {
+      await client.query(`
+        UPDATE "Bins" 
+        SET cfc_held = GREATEST(0, cfc_held - $1)
+        WHERE bin_no = $2
+      `, [hold.cfc_held, hold.bin_no]);
+    }
+    
+    await client.query(`
+      UPDATE "Bin_Holds" 
+      SET status = 'released' 
+      WHERE status = 'active' AND created_at < NOW() - INTERVAL '2 minutes'
+    `);
+    
+    // Reset all bins to zero held if negative
+    await client.query(`UPDATE "Bins" SET cfc_held = 0 WHERE cfc_held < 0`);
+    
+    await client.query('COMMIT');
+    
+    res.json({
+      success: true,
+      message: `Cleaned up ${oldHolds.rows.length} old holds`
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 // Run task management database migration
 app.post('/api/admin/run-task-migration', async (req, res) => {
   const client = await db.getClient();
@@ -753,14 +796,14 @@ app.post('/api/bins/hold', async (req, res) => {
       }
       
       // Create hold
-      console.log(`Creating hold: Bin ${binNo}, SKU ${binSku}, CFC ${cfcToHold}, Operator ${operatorId}`);
+      console.log(`Creating hold: Bin ${binNo}, SKU ${binSku}, CFC ${cfcToHold}, Operator ${operatorId}, Task ID: ${taskId}`);
       const holdResult = await client.query(
         `INSERT INTO "Bin_Holds" (bin_no, sku, cfc_held, operator_id, task_id, expires_at)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING hold_id`,
         [binNo, binSku, cfcToHold, operatorId, taskId, expiresAt]
       );
-      console.log(`✅ Hold created with ID: ${holdResult.rows[0].hold_id}`);
+      console.log(`✅ Hold created with ID: ${holdResult.rows[0].hold_id}, linked to Task ID: ${taskId}`);
       
       // Update bin's held count
       await client.query(
@@ -4709,9 +4752,9 @@ app.listen(PORT, async () => {
     // Run immediately on startup
     await autoExpireTasks();
     
-    // Schedule to run every minute
-    setInterval(autoExpireTasks, 60000);
-    console.log('⏰ Auto-expiry background job started (runs every 60 seconds)');
+    // Schedule to run every 10 seconds (faster cleanup)
+    setInterval(autoExpireTasks, 10000);
+    console.log('⏰ Auto-expiry background job started (runs every 10 seconds)');
     
     // Schedule periodic cleanup (every hour)
     setInterval(async () => {
