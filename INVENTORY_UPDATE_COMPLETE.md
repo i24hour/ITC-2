@@ -7,27 +7,33 @@
 Replaced old inventory data with new data from **BINGO STOCK 26.11.2025.xlsx - STOCK SHEET.csv**
 
 ### 📊 Data Statistics
+
 - **Source Rows**: 932 rows in CSV
 - **Valid Records**: 716 inventory items (empty bins skipped)
-- **Table**: `Bin_Inventory` 
+- **Table**: `Bin_Inventory`
 - **Structure Maintained**: BIN NO → SKU → BATCH → CFC (same as before)
 
 ## 🛠️ Tools Created
 
 ### 1. **SQL File** (Ready to Execute)
+
 📄 `database/update-inventory.sql`
+
 - Contains all 716 INSERT statements
 - First line: DELETE old data
 - Can be run in Azure Portal Query Editor
 
-### 2. **Web Upload Interface** 
+### 2. **Web Upload Interface**
+
 🌐 `public/upload-inventory.html`
+
 - URL: `https://itc-warehouse-app-2025-c8hgg5deeagae5dj.centralindia-01.azurewebsites.net/upload-inventory.html`
 - Drag & drop CSV file
 - Automatic upload to database
 - ⚠️ **Note**: Azure app currently has a transaction error, will work after automatic restart
 
 ### 3. **Command Line Scripts**
+
 ```bash
 # Generate SQL file from CSV
 node generate-inventory-sql.js
@@ -57,6 +63,7 @@ BINGO STOCK 26.11.2025.xlsx - STOCK SHEET.csv  # Source file
 ## 🚀 How to Update (3 Options)
 
 ### ⭐ Option 1: Web Interface (Easiest)
+
 1. Wait for Azure app to restart (automatic, ~5-10 min)
 2. Open: https://itc-warehouse-app-2025-c8hgg5deeagae5dj.centralindia-01.azurewebsites.net/upload-inventory.html
 3. Select CSV file
@@ -64,6 +71,7 @@ BINGO STOCK 26.11.2025.xlsx - STOCK SHEET.csv  # Source file
 5. Done! ✅
 
 ### 📝 Option 2: Azure Portal SQL (Manual but Reliable)
+
 1. Open [Azure Portal](https://portal.azure.com)
 2. Navigate to: PostgreSQL → itc-warehouse-db-2025 → Query editor
 3. Open file: `database/update-inventory.sql`
@@ -73,6 +81,7 @@ BINGO STOCK 26.11.2025.xlsx - STOCK SHEET.csv  # Source file
 7. Done! ✅
 
 ### 💻 Option 3: Command Line (If you have DB access)
+
 ```bash
 node upload-bingo-direct.js
 ```
@@ -80,6 +89,7 @@ node upload-bingo-direct.js
 ## ⚠️ Current Status
 
 **Azure App Issue**: Transaction error (stuck transaction)
+
 - **Cause**: Previous query error left unclosed transaction
 - **Solution**: Azure will auto-restart in 5-10 minutes
 - **Check**: `curl https://itc-warehouse-app-2025-c8hgg5deeagae5dj.centralindia-01.azurewebsites.net/api/health`
@@ -104,7 +114,7 @@ Table: "Bin_Inventory"
 After updating, verify with:
 
 ```sql
-SELECT 
+SELECT
   COUNT(*) as total_records,
   COUNT(DISTINCT bin_no) as unique_bins,
   COUNT(DISTINCT sku) as unique_skus
@@ -112,6 +122,7 @@ FROM "Bin_Inventory";
 ```
 
 **Expected Results:**
+
 - Total Records: 716
 - Unique Bins: ~450+
 - Unique SKUs: ~50+
