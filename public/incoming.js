@@ -1023,8 +1023,26 @@ async function completeTask() {
 
 function initStep3() {
     document.getElementById('cancel-scan').addEventListener('click', async () => {
-        // Save as pending task before canceling
-        await savePendingTaskFromScan();
+        // Stop timer
+        if (timerInterval) {
+            clearInterval(timerInterval);
+        }
+        
+        // Release holds
+        if (currentTaskId) {
+            await fetch('/api/bins/release-hold', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskId: currentTaskId })
+            });
+            
+            // Delete pending task
+            await fetch('/api/pending-tasks/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskId: currentTaskId })
+            });
+        }
         
         if (html5QrCode) {
             html5QrCode.stop();
