@@ -583,6 +583,92 @@ app.post('/api/admin/empty-all-tables', async (req, res) => {
       }
     }
     
+
+// Run task management database migration
+app.post('/api/admin/run-task-migration', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    console.log('🔧 Running task management migration...');
+    
+    await client.query('BEGIN');
+    
+    // Create Bin_Holds table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "Bin_Holds" (
+        hold_id SERIAL PRIMARY KEY,
+        bin_no VARCHAR(20) NOT NULL,
+        sku VARCHAR(50) NOT NULL,
+        cfc_held INTEGER NOT NULL,
+        operator_id VARCHAR(20) NOT NULL,
+        task_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP,
+        status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'released', 'expired')),
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✅ Bin_Holds table created');
+    
+    // Create indexes for Bin_Holds
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_bin_holds_status_expires 
+      ON "Bin_Holds" (status, expires_at)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_bin_holds_task_id 
+      ON "Bin_Holds" (task_id)
+    `);
+    console.log('✅ Bin_Holds indexes created');
+    
+    // Add columns to Bins table
+    await client.query(`
+      ALTER TABLE "Bins" 
+      ADD COLUMN IF NOT EXISTS cfc_capacity INTEGER DEFAULT 240,
+      ADD COLUMN IF NOT EXISTS cfc_held INTEGER DEFAULT 0
+    `);
+    console.log('✅ Bins table updated with capacity columns');
+    
+    // Add columns to Pending_Tasks table
+    await client.query(`
+      ALTER TABLE "Pending_Tasks"
+      ADD COLUMN IF NOT EXISTS bins_held JSONB,
+      ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending'
+    `);
+    console.log('✅ Pending_Tasks table updated');
+    
+    // Add columns to Task_History table
+    await client.query(`
+      ALTER TABLE "Task_History"
+      ADD COLUMN IF NOT EXISTS started_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS duration_seconds INTEGER,
+      ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP
+    `);
+    console.log('✅ Task_History table updated');
+    
+    await client.query('COMMIT');
+    
+    res.json({
+      success: true,
+      message: 'Task management migration completed successfully',
+      changes: {
+        tables_created: ['Bin_Holds'],
+        tables_updated: ['Bins', 'Pending_Tasks', 'Task_History']
+      }
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Migration error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Migration failed',
+      error: error.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
     res.json({
       success: true,
       message: 'All transaction tables emptied successfully',
@@ -595,6 +681,217 @@ app.post('/api/admin/empty-all-tables', async (req, res) => {
       error: error.message,
       stack: error.stack 
     });
+  } finally {
+    client.release();
+  }
+});
+
+// ==================== BIN HOLDING & TASK MANAGEMENT APIs ====================
+
+// Create bin holds when proceeding to scanning
+app.post('/api/bins/hold', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { operatorId, bins, taskId, expiresIn = 1800 } = req.body;
+    
+    if (!operatorId || !bins || bins.length === 0) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    const expiresAt = new Date(Date.now() + expiresIn * 1000);
+    const holds = [];
+    
+    await client.query('BEGIN');
+    
+    for (const bin of bins) {
+      const { binNo, sku, cfcToHold } = bin;
+      
+      // Check if bin has enough space
+      const binCheck = await client.query(
+        `SELECT cfc_capacity, COALESCE(cfc_held, 0) as cfc_held,
+                (SELECT COALESCE(SUM(cfc), 0) FROM "Inventory" WHERE bin_no = $1) as cfc_filled
+         FROM "Bins" WHERE bin_no = $1`,
+        [binNo]
+      );
+      
+      if (binCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: `Bin ${binNo} not found` });
+      }
+      
+      const { cfc_capacity, cfc_held, cfc_filled } = binCheck.rows[0];
+      const available = cfc_capacity - cfc_filled - cfc_held;
+      
+      if (available < cfcToHold) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ 
+          error: `Bin ${binNo} has insufficient space. Available: ${available}, Required: ${cfcToHold}` 
+        });
+      }
+      
+      // Create hold
+      const holdResult = await client.query(
+        `INSERT INTO "Bin_Holds" (bin_no, sku, cfc_held, operator_id, task_id, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING hold_id`,
+        [binNo, sku, cfcToHold, operatorId, taskId, expiresAt]
+      );
+      
+      // Update bin's held count
+      await client.query(
+        `UPDATE "Bins" SET cfc_held = COALESCE(cfc_held, 0) + $1 WHERE bin_no = $2`,
+        [cfcToHold, binNo]
+      );
+      
+      holds.push({
+        holdId: holdResult.rows[0].hold_id,
+        binNo,
+        sku,
+        cfcHeld: cfcToHold
+      });
+    }
+    
+    await client.query('COMMIT');
+    
+    res.json({
+      success: true,
+      holds: holds,
+      expiresAt: expiresAt,
+      message: `${holds.length} bins reserved successfully`
+    });
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Failed to create holds:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Release bin holds (when task completed or cancelled)
+app.post('/api/bins/release-hold', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { taskId, holdIds } = req.body;
+    
+    if (!taskId && !holdIds) {
+      return res.status(400).json({ error: 'Provide taskId or holdIds' });
+    }
+    
+    await client.query('BEGIN');
+    
+    let holds;
+    if (taskId) {
+      holds = await client.query(
+        `SELECT * FROM "Bin_Holds" WHERE task_id = $1 AND status = 'active'`,
+        [taskId]
+      );
+    } else {
+      holds = await client.query(
+        `SELECT * FROM "Bin_Holds" WHERE hold_id = ANY($1) AND status = 'active'`,
+        [holdIds]
+      );
+    }
+    
+    for (const hold of holds.rows) {
+      // Release the hold in Bins table
+      await client.query(
+        `UPDATE "Bins" SET cfc_held = GREATEST(0, COALESCE(cfc_held, 0) - $1) WHERE bin_no = $2`,
+        [hold.cfc_held, hold.bin_no]
+      );
+      
+      // Mark hold as released
+      await client.query(
+        `UPDATE "Bin_Holds" SET status = 'released' WHERE hold_id = $1`,
+        [hold.hold_id]
+      );
+    }
+    
+    await client.query('COMMIT');
+    
+    res.json({
+      success: true,
+      releasedCount: holds.rows.length,
+      message: 'Holds released successfully'
+    });
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Failed to release holds:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Check available space in a bin
+app.get('/api/bins/available-space/:binNo', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { binNo } = req.params;
+    
+    const result = await client.query(
+      `SELECT 
+        b.bin_no,
+        b.cfc_capacity as capacity,
+        COALESCE(b.cfc_held, 0) as held,
+        COALESCE((SELECT SUM(cfc) FROM "Inventory" WHERE bin_no = b.bin_no), 0) as filled,
+        b.cfc_capacity - COALESCE(b.cfc_held, 0) - COALESCE((SELECT SUM(cfc) FROM "Inventory" WHERE bin_no = b.bin_no), 0) as available
+       FROM "Bins" b
+       WHERE b.bin_no = $1`,
+      [binNo]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Bin not found' });
+    }
+    
+    res.json(result.rows[0]);
+    
+  } catch (error) {
+    console.error('❌ Error checking bin space:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Cancel task and save to history
+app.post('/api/tasks/cancel', async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { operatorId, taskType, sku, quantity, reason, bins } = req.body;
+    
+    if (!operatorId || !taskType) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    const user = await client.query(
+      'SELECT name FROM "Operators" WHERE operator_id = $1',
+      [operatorId]
+    );
+    
+    const operatorName = user.rows.length > 0 ? user.rows[0].name : operatorId;
+    
+    // Save to Task_History with 'cancelled' status
+    const result = await client.query(
+      `INSERT INTO "Task_History" 
+       (operator_id, operator_name, task_type, sku, quantity, bins_used, status, started_at, completed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'cancelled', NOW(), NOW())
+       RETURNING id`,
+      [operatorId, operatorName, taskType, sku, quantity, bins || null]
+    );
+    
+    res.json({
+      success: true,
+      taskId: result.rows[0].id,
+      message: 'Task cancelled and saved to history'
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to cancel task:', error);
+    res.status(500).json({ error: error.message });
   } finally {
     client.release();
   }
@@ -4295,6 +4592,84 @@ app.listen(PORT, async () => {
     
     // Clean up expired sessions on startup
     await sessions.cleanupExpiredSessions();
+    
+    // Auto-expiry background job for pending tasks
+    const autoExpireTasks = async () => {
+      try {
+        // Find expired pending tasks
+        const expiredTasks = await db.query(`
+          SELECT * FROM "Pending_Tasks" 
+          WHERE expires_at < NOW() AND status = 'pending'
+        `);
+        
+        if (expiredTasks.rows.length > 0) {
+          console.log(`⏰ Found ${expiredTasks.rows.length} expired task(s), processing...`);
+          
+          for (const task of expiredTasks.rows) {
+            const client = await db.connect();
+            try {
+              await client.query('BEGIN');
+              
+              // Release bin holds for this task
+              const holds = await client.query(`
+                SELECT * FROM "Bin_Holds" 
+                WHERE task_id = $1 AND status = 'active'
+              `, [task.id]);
+              
+              if (holds.rows.length > 0) {
+                // Update each bin's held space
+                for (const hold of holds.rows) {
+                  await client.query(`
+                    UPDATE "Bins" 
+                    SET cfc_held = GREATEST(0, cfc_held - $1)
+                    WHERE bin_no = $2
+                  `, [hold.cfc_held, hold.bin_no]);
+                }
+                
+                // Mark holds as released
+                await client.query(`
+                  UPDATE "Bin_Holds" 
+                  SET status = 'released', updated_at = NOW()
+                  WHERE task_id = $1 AND status = 'active'
+                `, [task.id]);
+              }
+              
+              // Move to Task_History with incomplete status
+              await client.query(`
+                INSERT INTO "Task_History" (
+                  operator_id, task_type, sku, bin_no, cfc, weight, batch_no,
+                  started_at, completed_at, duration_seconds, status
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), 
+                  EXTRACT(EPOCH FROM (NOW() - $8))::INTEGER, 'incomplete')
+              `, [
+                task.operator_id, task.task_type, task.sku, task.bin_no,
+                task.cfc, task.weight, task.batch_no, task.created_at
+              ]);
+              
+              // Delete the pending task
+              await client.query('DELETE FROM "Pending_Tasks" WHERE id = $1', [task.id]);
+              
+              await client.query('COMMIT');
+              console.log(`✅ Expired task ID ${task.id} (${task.task_type} - ${task.sku}) moved to history as incomplete`);
+            } catch (err) {
+              await client.query('ROLLBACK');
+              console.error(`❌ Error processing expired task ${task.id}:`, err.message);
+            } finally {
+              client.release();
+            }
+          }
+        }
+      } catch (err) {
+        console.error('❌ Auto-expiry job error:', err.message);
+      }
+    };
+    
+    // Run immediately on startup
+    await autoExpireTasks();
+    
+    // Schedule to run every minute
+    setInterval(autoExpireTasks, 60000);
+    console.log('⏰ Auto-expiry background job started (runs every 60 seconds)');
     
     // Schedule periodic cleanup (every hour)
     setInterval(async () => {

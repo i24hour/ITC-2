@@ -103,6 +103,27 @@ function initStep1() {
         calculateWeight();
     });
     
+    // Cancel task button handler
+    const cancelBtn = document.getElementById('cancel-task-btn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', async () => {
+            const sku = document.getElementById('sku-input').value.trim();
+            const cfc = parseInt(document.getElementById('cfc-count').value) || 0;
+            const weight = parseFloat(document.getElementById('weight-input').value) || 0;
+            
+            if (!sku && !cfc) {
+                // Nothing to cancel
+                window.location.href = 'dashboard.html';
+                return;
+            }
+            
+            if (confirm('Are you sure you want to cancel this task?')) {
+                await cancelTask(sku, cfc, weight, 'User cancelled in Step 1');
+                window.location.href = 'dashboard.html';
+            }
+        });
+    }
+    
     form.addEventListener('submit', (e) => {
         e.preventDefault();
         
@@ -119,6 +140,38 @@ function initStep1() {
         
         goToStep2();
     });
+}
+
+// Cancel task and save to Task_History
+async function cancelTask(sku, cfc, weight, reason = 'User cancelled') {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user || !user.operatorId) return;
+    
+    try {
+        const response = await fetch('/api/tasks/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                operatorId: user.operatorId,
+                taskType: 'incoming',
+                sku: sku || '',
+                binNo: null,
+                cfc: cfc || 0,
+                weight: weight || 0,
+                batchNo: null,
+                reason: reason
+            })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            console.log('✅ Task cancelled and saved to history');
+        } else {
+            console.error('Failed to save cancelled task:', result.message);
+        }
+    } catch (error) {
+        console.error('Error cancelling task:', error);
+    }
 }
 
 // Fetch and display SKU details (description and UOM)
@@ -426,8 +479,21 @@ async function savePendingTask() {
 
 // ===== STEP 3: QR Scanner =====
 async function goToStep3() {
+    // Create bin holds before proceeding
+    const holdsCreated = await createBinHolds();
+    if (!holdsCreated) {
+        alert('Failed to reserve bin space. Please try again.');
+        return;
+    }
+    
+    // Create pending task with 30-minute expiry
+    await createPendingTaskWithTimer();
+    
     document.getElementById('step2').classList.remove('active');
     document.getElementById('step3').classList.add('active');
+    
+    // Start 30-minute timer
+    startTaskTimer();
     
     // Create task for supervisor monitoring
     await createTask();
@@ -440,6 +506,133 @@ async function goToStep3() {
     
     // Initialize step 3 buttons
     initStep3();
+}
+
+// Create bin holds for selected bins
+async function createBinHolds() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user || !user.operatorId) return false;
+    
+    try {
+        // Build bins array from selectedBinsWithQty Map
+        const bins = Array.from(selectedBinsWithQty.entries()).map(([binNo, data]) => ({
+            binNo: binNo,
+            cfcToHold: data.quantity
+        }));
+        
+        const response = await fetch('/api/bins/hold', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                bins: bins,
+                operatorId: user.operatorId,
+                sku: incomingData.sku,
+                taskId: null // Will be set when pending task is created
+            })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            console.log('✅ Bin holds created:', result.holds);
+            currentTaskId = result.taskId; // Store for later use
+            return true;
+        } else {
+            console.error('Failed to create holds:', result.message);
+            alert(result.message || 'Failed to reserve bin space');
+            return false;
+        }
+    } catch (error) {
+        console.error('Error creating bin holds:', error);
+        return false;
+    }
+}
+
+// Create pending task with 30-minute timer
+async function createPendingTaskWithTimer() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user || !user.operatorId) return;
+    
+    try {
+        const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes from now
+        
+        const response = await fetch('/api/pending-tasks/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                operatorId: user.operatorId,
+                taskType: 'incoming',
+                sku: incomingData.sku,
+                binNo: Array.from(selectedBinsWithQty.keys()).join(','),
+                cfc: incomingData.quantity,
+                weight: incomingData.weight,
+                expiresAt: expiresAt.toISOString(),
+                binsHeld: Array.from(selectedBinsWithQty.entries()).map(([binNo, data]) => ({
+                    binNo: binNo,
+                    cfc: data.quantity
+                }))
+            })
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            currentTaskId = result.task.id;
+            console.log('✅ Pending task created with ID:', currentTaskId);
+        }
+    } catch (error) {
+        console.error('Error creating pending task:', error);
+    }
+}
+
+// Timer variables
+let timerInterval = null;
+let timerEndTime = null;
+
+// Start 30-minute countdown timer
+function startTaskTimer() {
+    timerEndTime = Date.now() + 30 * 60 * 1000; // 30 minutes
+    
+    // Update timer display every second
+    timerInterval = setInterval(() => {
+        const remaining = timerEndTime - Date.now();
+        
+        if (remaining <= 0) {
+            // Timer expired
+            clearInterval(timerInterval);
+            handleTimerExpiry();
+        } else {
+            // Update display
+            const minutes = Math.floor(remaining / 60000);
+            const seconds = Math.floor((remaining % 60000) / 1000);
+            const timerDisplay = document.getElementById('time-remaining');
+            if (timerDisplay) {
+                timerDisplay.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                
+                // Change color when less than 5 minutes
+                if (remaining < 5 * 60 * 1000) {
+                    timerDisplay.style.color = '#d9534f'; // Red
+                } else {
+                    timerDisplay.style.color = '#5cb85c'; // Green
+                }
+            }
+        }
+    }, 1000);
+}
+
+// Handle timer expiry
+async function handleTimerExpiry() {
+    alert('Task time expired! Holds will be released and task marked as incomplete.');
+    
+    // Release holds
+    if (currentTaskId) {
+        await fetch('/api/bins/release-hold', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ taskId: currentTaskId })
+        });
+    }
+    
+    // Redirect to dashboard
+    window.location.href = 'dashboard.html';
 }
 
 // Create task for supervisor monitoring
@@ -887,6 +1080,20 @@ function initStep3() {
     });
     
     document.getElementById('complete-incoming').addEventListener('click', async () => {
+        // Stop timer
+        if (timerInterval) {
+            clearInterval(timerInterval);
+        }
+        
+        // Release bin holds
+        if (currentTaskId) {
+            await fetch('/api/bins/release-hold', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskId: currentTaskId })
+            });
+        }
+        
         // Delete pending task if exists
         await deletePendingTask();
         
