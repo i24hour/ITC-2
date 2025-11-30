@@ -48,6 +48,27 @@ DATABASE_5_TABLES_STRUCTURE.md
 VALID_BINS_REFERENCE.md
 TASK_HISTORY_FLOW.md
 OPERATOR_ID_FORMAT.md
+TASK_MANAGEMENT_IMPLEMENTATION.md
+TASK_MANAGEMENT_PLAN.md
+TASK_MANAGEMENT_TESTING.md
+TASK_MANAGEMENT_COMPLETE.md
+DATABASE_EXPLANATION.md
+DATABASE_STRUCTURE_AND_RELATIONSHIPS.md
+MIGRATION_SUMMARY.md
+OPERATOR_TASK_HISTORY_COMPLETE.md
+INVENTORY_UPDATE_COMPLETE.md
+AGING_*.md
+DEPLOYMENT_*.md
+FRONTEND_README.md
+GITHUB_DEPLOYMENT_GUIDE.md
+AFTER_GITHUB_PUSH.md
+AZURE_*.md
+CONNECTION_STATUS.md
+EXCEL_DATABASE_MIGRATION.md
+FIX-*.txt
+*.aux
+*.toc
+*.tex
 
 # Local server startup scripts (with local paths)
 start-server.bat
@@ -61,24 +82,49 @@ check-inventory-data.js
 check-outgoing-table.js
 check-all-tables.js
 check-active-skus.js
+check-excel-structure.js
+check-table-structure.js
 create-active-skus-table.js
 export-all-database.js
+export-inventory.js
+download-*.js
 test-db.js
 generate-all-bin-qrcodes.js
 generate-bin-qrcodes.js
+debug-batch.js
+empty-*.js
+migrate-pending-tasks.js
+change-db-password.js
+execute-sql-directly.js
+generate-*-sql.js
+fix-batch-no-length.js
+complete-aging-workflow.js
+
+# Database migration scripts (already in database/ folder)
+database/create-task-management-tables.js
 
 # Deployment and commit helper scripts
 deploy-to-azure.ps1
+deploy.sh
+azure-deploy.sh
 commit-changes.bat
 push-to-github.ps1
 startup.sh
 .deployment-ignore
 host.json
+add-*.sh
+add-*.js
 
-# Excel file (already imported to database)
+# Excel and CSV files (already imported to database)
 *.xlsx
+*.csv
 BINGO*.xlsx
+Cleaned_*.csv
+Inventory_*.csv
+Incoming_*.csv
+export_queries.sql
 
 # Temporary/extra documentation files
 AZURE_DEPLOYMENT_GUIDE.md
 cribe your changes
+ADD-NEW-SKUS-GUIDE.sh
