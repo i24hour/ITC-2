@@ -675,53 +675,6 @@ async function createTask() {
     }
 }
 
-// Timer variables
-let timerInterval = null;
-const TASK_TIMEOUT_MINUTES = 1; // 1 minute for testing
-
-function startTaskTimer(createdAt) {
-    const timerDisplay = document.getElementById('time-remaining');
-    if (!timerDisplay) return;
-    
-    const startTime = new Date(createdAt).getTime();
-    const endTime = startTime + (TASK_TIMEOUT_MINUTES * 60 * 1000);
-    
-    // Clear any existing timer
-    if (timerInterval) {
-        clearInterval(timerInterval);
-    }
-    
-    // Start periodic status check
-    startTaskStatusCheck();
-    
-    timerInterval = setInterval(() => {
-        const now = Date.now();
-        const remaining = endTime - now;
-        
-        if (remaining <= 0) {
-            clearInterval(timerInterval);
-            autoCancelTask();
-            return;
-        }
-        
-        // Calculate minutes and seconds
-        const minutes = Math.floor(remaining / 60000);
-        const seconds = Math.floor((remaining % 60000) / 1000);
-        
-        // Update display
-        timerDisplay.textContent = `${minutes}:${String(seconds).padStart(2, '0')}`;
-        
-        // Change color based on time remaining
-        if (remaining < 5 * 60 * 1000) { // Less than 5 minutes
-            timerDisplay.style.color = '#d9534f'; // Red
-            document.getElementById('timer-warning').style.background = '#f8d7da';
-            document.getElementById('timer-warning').style.borderColor = '#d9534f';
-        } else if (remaining < 10 * 60 * 1000) { // Less than 10 minutes
-            timerDisplay.style.color = '#f0ad4e'; // Orange
-        }
-    }, 1000);
-}
-
 // Periodic check if task is still valid (every 10 seconds)
 let statusCheckInterval = null;
 
